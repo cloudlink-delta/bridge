@@ -137,7 +137,7 @@ func BuildHandshakeResponse(serverVersion string) ([]byte, error) {
 	return json.Marshal(resp)
 }
 
-// CL2HandleMessage
+// CL2HandleMessage handles incoming messages from clients using the CL2 protocol.
 func CL2HandleMessage(client *Client, msg string) {
 	handler := NewCL2PacketFormatter()
 	manager := client.manager

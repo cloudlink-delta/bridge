@@ -17,6 +17,7 @@ type Client struct {
 	uuid            uuid.UUID
 	username        any
 	protocol        string
+	dialect         int
 	rooms           map[any]*Room
 	handshake       bool
 
@@ -28,7 +29,15 @@ type Client struct {
 const (
 	Protocol_Detecting = ""
 	Protocol_CL2       = "cl2"
-	Protocol_CL3       = "cl3"
 	Protocol_CL4       = "cl4"
 	Protocol_CloudVars = "cloudvar"
+)
+
+// Dialect constants for differentiating between CL protocol versions
+const (
+	Dialect_CL3_0_1_5 = iota // S2.2 compatible, no listeners/MOTD/statuscodes
+	Dialect_CL3_0_1_7        // Supports early MOTD and statuscodes
+	Dialect_CL4_0_1_8        // Supports listeners and rooms, but no handshake
+	Dialect_CL4_0_1_9        // Implements the handshake command
+	Dialect_CL4_0_2_0        // Implements native data types (autoConvert)
 )

@@ -62,11 +62,29 @@ func (client *Client) MessageHandler(manager *Manager) {
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			} else if cl4packet.Cmd != "" {
-				log.Println("Detected CL4 or CL3 protocol, specific dialect not yet confirmed")
+				log.Println("Detected CL3/CL4 protocol, determining dialect...")
 
 				// Update client attributes
 				client.Lock()
-				client.protocol = Protocol_CL4 // CL4
+				client.protocol = Protocol_CL4
+
+				// Detect dialect
+				if cl4packet.Cmd == "handshake" {
+					log.Println("Dialect detected: CL4 (v0.1.9.x or newer)")
+					client.dialect = Dialect_CL4_0_1_9
+
+				} else if cl4packet.Cmd == "direct" && isTypeDeclaration(cl4packet.Val) {
+					log.Println("Dialect detected: CL3 (v0.1.7 compatible)")
+					client.dialect = Dialect_CL3_0_1_7
+
+				} else if cl4packet.Cmd == "link" || cl4packet.Listener != "" {
+					log.Println("Dialect detected: CL4 (v0.1.8.x)")
+					client.dialect = Dialect_CL4_0_1_8
+
+				} else {
+					log.Println("Detection failed, assuming CL3 (early, v0.1.5 compatible)")
+					client.dialect = Dialect_CL3_0_1_5
+				}
 				client.Unlock()
 
 				// Add the client to the default room
@@ -141,4 +159,14 @@ func SessionHandler(con *websocket.Conn, manager *Manager) {
 
 	// Begin handling messages throughout the lifespan of the connection
 	client.MessageHandler(manager)
+}
+
+// isTypeDeclaration is a helper to check for the CL3 direct/type command
+func isTypeDeclaration(val any) bool {
+	if valMap, ok := val.(map[string]any); ok {
+		if cmd, ok := valMap["cmd"].(string); ok && cmd == "type" {
+			return true
+		}
+	}
+	return false
 }
