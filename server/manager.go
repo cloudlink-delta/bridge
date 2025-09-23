@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var ServerVersion string = "0.1.0-golang"
+var ServerVersion string = "0.1.1-golang"
 
 type Room struct {
 	// Subscribed clients to the room
@@ -217,4 +217,59 @@ func (manager *Manager) RemoveClient(client *Client) {
 		}
 	}
 	manager.clientsMutex.Unlock()
+}
+
+// findClientByUsername iterates through all clients in the manager to find one by its username.
+func findClientByUsername(manager *Manager, username any) (*Client, bool) {
+	manager.clientsMutex.RLock()
+	defer manager.clientsMutex.RUnlock()
+
+	for _, client := range manager.clients {
+		client.RLock()
+		// Check if the username is set and matches
+		if client.username != nil && client.username == username {
+			client.RUnlock()
+			return client, true
+		}
+		client.RUnlock()
+	}
+	return nil, false
+}
+
+// getAllUsernamesInRoom collects the usernames of all clients subscribed to a specific room.
+func getAllUsernamesInRoom(room *Room) []string {
+	room.clientsMutex.RLock()
+	defer room.clientsMutex.RUnlock()
+
+	usernames := make([]string, 0, len(room.clients))
+	for _, client := range room.clients {
+		client.RLock()
+		if client.username != nil {
+			if name, ok := client.username.(string); ok {
+				usernames = append(usernames, name)
+			}
+		}
+		client.RUnlock()
+	}
+	return usernames
+}
+
+// getClientGroupsByHandshake splits a room's clients into two groups based on their handshake status.
+func getClientGroupsByHandshake(room *Room) (specialClients, standardClients map[snowflake.ID]*Client) {
+	specialClients = make(map[snowflake.ID]*Client)
+	standardClients = make(map[snowflake.ID]*Client)
+
+	room.clientsMutex.RLock()
+	defer room.clientsMutex.RUnlock()
+
+	for id, client := range room.clients {
+		client.RLock()
+		if client.handshake {
+			specialClients[id] = client
+		} else {
+			standardClients[id] = client
+		}
+		client.RUnlock()
+	}
+	return specialClients, standardClients
 }

@@ -35,16 +35,40 @@ func (client *Client) MessageHandler(manager *Manager) {
 
 		switch client.protocol {
 		case 0: // Detect protocol
+			// Attempt to detect protocol
+
+			// CL2 protcol
+			var cl2packet = NewCL2PacketFormatter()
+			if _, ok := cl2packet.Parse(string(message)); ok {
+				log.Println("Detected CL2 protocol")
+
+				// Update client attributes
+				client.Lock()
+				client.protocol = 3 // CL2
+				client.Unlock()
+
+				// Add the client to the default room
+				defaultroom := client.manager.CreateRoom("default")
+				defaultroom.SubscribeClient(client)
+
+				CL2HandleMessage(client, string(message))
+				continue
+			}
+
 			// CL4 protocol
 			var cl4packet PacketUPL
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
+			} else {
+				log.Println("Detected CL4 or CL3 protocol, specific dialect not yet confirmed")
 			}
 
 			// Scratch protocol
 			var scratchpacket Scratch
 			if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
+			} else {
+				log.Println("Detected Scratch protocol")
 			}
 
 			// Handle requests
@@ -71,6 +95,9 @@ func (client *Client) MessageHandler(manager *Manager) {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			}
 			ScratchMethodHandler(client, &scratchpacket)
+
+		case 3: // CL2
+			CL2HandleMessage(client, string(message))
 		}
 	}
 }

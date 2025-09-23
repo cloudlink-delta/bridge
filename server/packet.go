@@ -1,5 +1,7 @@
 package cloudlink
 
+import "github.com/goccy/go-json"
+
 // This structure represents the JSON formatting used for the current CloudLink formatting scheme.
 // Values that are not specific to one type are represented with any.
 type PacketUPL struct {
@@ -16,6 +18,11 @@ type PacketUPL struct {
 	Details  string      `json:"details,omitempty"`
 }
 
+func (packet PacketUPL) ToBytes() []byte {
+	marshaled, _ := json.Marshal(packet)
+	return marshaled
+}
+
 // This structure represents the JSON formatting the Scratch cloud variable protocol uses.
 // Values that are not specific to one type are represented with any.
 type Scratch struct {
@@ -25,6 +32,11 @@ type Scratch struct {
 	Value     any    `json:"value"`
 	Name      any    `json:"name,omitempty"`
 	NewName   any    `json:"new_name,omitempty"`
+}
+
+func (packet Scratch) ToBytes() []byte {
+	marshaled, _ := json.Marshal(packet)
+	return marshaled
 }
 
 // This structure is an abstract representation of a CL2 packet.

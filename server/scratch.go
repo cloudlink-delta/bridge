@@ -41,11 +41,11 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 		// Update variable states
 		room.gvarStateMutex.RLock()
 		for name, value := range room.gvarState {
-			MulticastMessage(room.clients, &Scratch{
+			MulticastMessage(room.clients, Scratch{
 				Method: "set",
 				Value:  value,
 				Name:   name,
-			})
+			}.ToBytes())
 		}
 		room.gvarStateMutex.RUnlock()
 
@@ -58,11 +58,11 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 
 			// Broadcast the new state
 			room.gvarStateMutex.RLock()
-			MulticastMessage(room.clients, &Scratch{
+			MulticastMessage(room.clients, Scratch{
 				Method: "set",
 				Value:  room.gvarState[message.Name],
 				Name:   message.Name,
-			})
+			}.ToBytes())
 			room.gvarStateMutex.RUnlock()
 		}
 
@@ -76,11 +76,11 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 
 			// Broadcast the new state
 			room.gvarStateMutex.RLock()
-			MulticastMessage(room.clients, &Scratch{
+			MulticastMessage(room.clients, Scratch{
 				Method: "create",
 				Value:  room.gvarState[message.Name],
 				Name:   message.Name,
-			})
+			}.ToBytes())
 			room.gvarStateMutex.RUnlock()
 		}
 
@@ -99,11 +99,11 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
-			MulticastMessage(room.clients, &Scratch{
+			MulticastMessage(room.clients, Scratch{
 				Method:  "rename",
 				NewName: message.NewName,
 				Name:    message.Name,
-			})
+			}.ToBytes())
 		}
 
 	case "delete":
@@ -115,10 +115,10 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
-			MulticastMessage(room.clients, &Scratch{
+			MulticastMessage(room.clients, Scratch{
 				Method: "delete",
 				Name:   message.Name,
-			})
+			}.ToBytes())
 		}
 
 	default:

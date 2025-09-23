@@ -49,12 +49,12 @@ func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude b
 	}
 
 	// Broadcast state
-	MulticastMessage(dummy.clients, &PacketUPL{
+	MulticastMessage(dummy.clients, PacketUPL{
 		Cmd:   "ulist",
 		Val:   client.GenerateUserObject(),
 		Mode:  event,
 		Rooms: room.name,
-	})
+	}.ToBytes())
 }
 
 func (room *Room) BroadcastGmsg(value any) {
@@ -65,11 +65,11 @@ func (room *Room) BroadcastGmsg(value any) {
 
 	// Broadcast the new state
 	room.gmsgStateMutex.RLock()
-	MulticastMessage(room.clients, &PacketUPL{
+	MulticastMessage(room.clients, PacketUPL{
 		Cmd:   "gmsg",
 		Val:   room.gmsgState,
 		Rooms: room.name,
-	})
+	}.ToBytes())
 	room.gmsgStateMutex.RUnlock()
 }
 
@@ -81,24 +81,24 @@ func (room *Room) BroadcastGvar(name any, value any) {
 
 	// Broadcast the new state
 	room.gvarStateMutex.RLock()
-	MulticastMessage(room.clients, &PacketUPL{
+	MulticastMessage(room.clients, PacketUPL{
 		Cmd:   "gvar",
 		Name:  name,
 		Val:   room.gvarState[name],
 		Rooms: room.name,
-	})
+	}.ToBytes())
 	room.gvarStateMutex.RUnlock()
 }
 
 func (client *Client) RequireIDBeingSet(message *PacketUPL) bool {
 	usernameunset := (client.TempCopy().username == nil)
 	if usernameunset {
-		UnicastMessage(client, &PacketUPL{
+		UnicastMessage(client, PacketUPL{
 			Cmd:      "statuscode",
 			Code:     "E:111 | ID required",
 			CodeID:   111,
 			Listener: message.Listener,
-		})
+		}.ToBytes())
 	}
 	return usernameunset
 }
@@ -106,13 +106,13 @@ func (client *Client) RequireIDBeingSet(message *PacketUPL) bool {
 func (client *Client) HandleIDSet(message *PacketUPL) bool {
 	usernameset := (client.TempCopy().username != nil)
 	if usernameset {
-		UnicastMessage(client, &PacketUPL{
+		UnicastMessage(client, PacketUPL{
 			Cmd:      "statuscode",
 			Code:     "E:107 | ID already set",
 			CodeID:   107,
 			Val:      client.GenerateUserObject(),
 			Listener: message.Listener,
-		})
+		}.ToBytes())
 	}
 	return usernameset
 }
@@ -136,76 +136,76 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 
 			// Send the client's IP address
 			if client.manager.Config.CheckIPAddresses {
-				UnicastMessage(client, &PacketUPL{
+				UnicastMessage(client, PacketUPL{
 					Cmd: "client_ip",
 					Val: client.connection.Conn.RemoteAddr().String(),
-				})
+				}.ToBytes())
 			}
 
 			// Send the server version info
-			UnicastMessage(client, &PacketUPL{
+			UnicastMessage(client, PacketUPL{
 				Cmd: "server_version",
 				Val: ServerVersion,
-			})
+			}.ToBytes())
 
 			// Send MOTD
 			if client.manager.Config.EnableMOTD {
-				UnicastMessage(client, &PacketUPL{
+				UnicastMessage(client, PacketUPL{
 					Cmd: "motd",
 					Val: client.manager.Config.MOTDMessage,
-				})
+				}.ToBytes())
 			}
 
 			// Send Client's object
-			UnicastMessage(client, &PacketUPL{
+			UnicastMessage(client, PacketUPL{
 				Cmd: "client_obj",
 				Val: client.GenerateUserObject(),
-			})
+			}.ToBytes())
 
 			// Send gmsg, ulist, and gvar states
 			rooms := client.TempCopy().rooms
 			for _, room := range rooms {
-				UnicastMessage(client, &PacketUPL{
+				UnicastMessage(client, PacketUPL{
 					Cmd:   "gmsg",
 					Val:   room.gmsgState,
 					Rooms: room.name,
-				})
-				UnicastMessage(client, &PacketUPL{
+				}.ToBytes())
+				UnicastMessage(client, PacketUPL{
 					Cmd:   "ulist",
 					Mode:  "set",
 					Val:   room.GenerateUserList(),
 					Rooms: room.name,
-				})
+				}.ToBytes())
 				room.gvarStateMutex.RLock()
 				for name, value := range room.gvarState {
-					UnicastMessage(client, &PacketUPL{
+					UnicastMessage(client, PacketUPL{
 						Cmd:   "gvar",
 						Name:  name,
 						Val:   value,
 						Rooms: room.name,
-					})
+					}.ToBytes())
 				}
 				room.gvarStateMutex.RUnlock()
 			}
 		}
 
 		// Send status code
-		UnicastMessage(client, &PacketUPL{
+		UnicastMessage(client, PacketUPL{
 			Cmd:    "statuscode",
 			Code:   "I:100 | OK",
 			CodeID: 100,
-		})
+		}.ToBytes())
 
 	case "gmsg":
 		// Check if required Val argument is provided
 		switch message.Val.(type) {
 		case nil:
-			UnicastMessage(client, &PacketUPL{
+			UnicastMessage(client, PacketUPL{
 				Cmd:     "statuscode",
 				Code:    "E:101 | Syntax",
 				CodeID:  101,
 				Details: "Message missing required val key",
-			})
+			}.ToBytes())
 			return
 		}
 
@@ -269,13 +269,13 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		case bool:
 		default:
 			// Send status code
-			UnicastMessage(client, &PacketUPL{
+			UnicastMessage(client, PacketUPL{
 				Cmd:      "statuscode",
 				Code:     "E:102 | Datatype",
 				CodeID:   102,
 				Details:  "Username value (val) must be a string, boolean, float, or int",
 				Listener: message.Listener,
-			})
+			}.ToBytes())
 			return
 		}
 
@@ -293,22 +293,22 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		rooms := client.TempCopy().rooms
 		for _, room := range rooms {
 			room.BroadcastUserlistEvent("add", client, true)
-			UnicastMessage(client, &PacketUPL{
+			UnicastMessage(client, PacketUPL{
 				Cmd:   "ulist",
 				Mode:  "set",
 				Val:   room.GenerateUserList(),
 				Rooms: room.name,
-			})
+			}.ToBytes())
 		}
 
 		// Send status code
-		UnicastMessage(client, &PacketUPL{
+		UnicastMessage(client, PacketUPL{
 			Cmd:      "statuscode",
 			Code:     "I:100 | OK",
 			CodeID:   100,
 			Val:      client.GenerateUserObject(),
 			Listener: message.Listener,
-		})
+		}.ToBytes())
 
 	case "gvar":
 		// Handle multiple types for room
@@ -359,12 +359,12 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		switch message.Val.(type) {
 
 		case nil:
-			UnicastMessage(client, &PacketUPL{
+			UnicastMessage(client, PacketUPL{
 				Cmd:     "statuscode",
 				Code:    "E:101 | Syntax",
 				CodeID:  101,
 				Details: "Message missing required val key",
-			})
+			}.ToBytes())
 			return
 
 		// Multiple rooms
@@ -378,13 +378,13 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 				case bool:
 				default:
 					// Send status code
-					UnicastMessage(client, &PacketUPL{
+					UnicastMessage(client, PacketUPL{
 						Cmd:      "statuscode",
 						Code:     "E:102 | Datatype",
 						CodeID:   102,
 						Details:  "Multiple rooms value (val) must be an array of strings, bools, floats, or ints.",
 						Listener: message.Listener,
-					})
+					}.ToBytes())
 					return
 				}
 			}
@@ -408,13 +408,13 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			case bool:
 			default:
 				// Send status code
-				UnicastMessage(client, &PacketUPL{
+				UnicastMessage(client, PacketUPL{
 					Cmd:      "statuscode",
 					Code:     "E:102 | Datatype",
 					CodeID:   102,
 					Details:  "Single room value (val) must be a string, boolean, float, int.",
 					Listener: message.Listener,
-				})
+				}.ToBytes())
 				return
 			}
 
@@ -427,11 +427,11 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		}
 
 		// Send status code
-		UnicastMessage(client, &PacketUPL{
+		UnicastMessage(client, PacketUPL{
 			Cmd:    "statuscode",
 			Code:   "I:100 | OK",
 			CodeID: 100,
-		})
+		}.ToBytes())
 
 	case "unlink":
 		// Require username to be set before usage
@@ -469,13 +469,13 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 				case float64:
 				default:
 					// Send status code
-					UnicastMessage(client, &PacketUPL{
+					UnicastMessage(client, PacketUPL{
 						Cmd:      "statuscode",
 						Code:     "E:102 | Datatype",
 						CodeID:   102,
 						Details:  "Multiple rooms value (val) must be an array of strings",
 						Listener: message.Listener,
-					})
+					}.ToBytes())
 					return
 				}
 			}
@@ -505,13 +505,13 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			case float64:
 			default:
 				// Send status code
-				UnicastMessage(client, &PacketUPL{
+				UnicastMessage(client, PacketUPL{
 					Cmd:      "statuscode",
 					Code:     "E:102 | Datatype",
 					CodeID:   102,
 					Details:  "Single room value (val) must be a string",
 					Listener: message.Listener,
-				})
+				}.ToBytes())
 				return
 			}
 
@@ -530,11 +530,11 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		}
 
 		// Send status code
-		UnicastMessage(client, &PacketUPL{
+		UnicastMessage(client, PacketUPL{
 			Cmd:    "statuscode",
 			Code:   "I:100 | OK",
 			CodeID: 100,
-		})
+		}.ToBytes())
 
 	case "direct":
 		// Require username to be set before usage
@@ -543,16 +543,16 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		}
 
 	case "echo":
-		UnicastMessage(client, message)
+		UnicastMessage(client, message.ToBytes())
 
 	default:
 		// Handle unknown commands
-		UnicastMessage(client, &PacketUPL{
+		UnicastMessage(client, PacketUPL{
 			Cmd:    "statuscode",
 			Code:   "E:109 | Invalid command",
 			CodeID: 109,
 			// Val:      client.GenerateUserObject(),
 			Listener: message.Listener,
-		})
+		}.ToBytes())
 	}
 }

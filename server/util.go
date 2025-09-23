@@ -202,7 +202,7 @@ func GatherUserObjects(clientstore any) map[any]*Client {
 			continue
 		}
 
-		alluserobjects[string(JSONDump(client.GenerateUserObject()))] = client
+		alluserobjects[client.GenerateUserObject()] = client
 	}
 
 	// Free lock
@@ -281,7 +281,7 @@ func (room *Room) FindClient(query any) any {
 	case map[string]any:
 		// Attempt User object search
 		userobjects := GatherUserObjects(room)
-		querystring := string(JSONDump(query))
+		querystring := query
 		if _, ok := userobjects[querystring]; ok {
 			return userobjects[querystring] // Returns *Client
 		}
