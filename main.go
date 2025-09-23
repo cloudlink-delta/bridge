@@ -9,7 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/monitor"
 
-	cloudlink "github.com/mikedev101/cloudlink/golang/server"
+	cloudlink "github.com/cloudlink-omega/legacy-bridge/server"
 )
 
 func main() {

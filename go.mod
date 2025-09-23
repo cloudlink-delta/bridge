@@ -1,4 +1,4 @@
-module github.com/mikedev101/cloudlink/golang
+module github.com/cloudlink-omega/legacy-bridge
 
 go 1.20
 
