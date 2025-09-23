@@ -56,7 +56,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 			}
 
 			// CL4 protocol
-			var cl4packet PacketUPL
+			var cl4packet Packet_CL4
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			} else {
@@ -64,7 +64,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 			}
 
 			// Scratch protocol
-			var scratchpacket Scratch
+			var scratchpacket Packet_CloudVarScratch
 			if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			} else {
@@ -83,14 +83,14 @@ func (client *Client) MessageHandler(manager *Manager) {
 			}
 
 		case 1: // CL4
-			var cl4packet PacketUPL
+			var cl4packet Packet_CL4
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			}
 			CL4MethodHandler(client, &cl4packet)
 
 		case 2: // Scratch
-			var scratchpacket Scratch
+			var scratchpacket Packet_CloudVarScratch
 			if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			}

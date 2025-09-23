@@ -14,7 +14,7 @@ func ScratchProtocolDetect(client *Client) {
 }
 
 // ScratchMethodHandler is a method that gets created when a Scratch-formatted message gets handled by MessageHandler.
-func ScratchMethodHandler(client *Client, message *Scratch) {
+func ScratchMethodHandler(client *Client, message *Packet_CloudVarScratch) {
 	switch message.Method {
 	case "handshake":
 
@@ -41,7 +41,7 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 		// Update variable states
 		room.gvarStateMutex.RLock()
 		for name, value := range room.gvarState {
-			MulticastMessage(room.clients, Scratch{
+			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method: "set",
 				Value:  value,
 				Name:   name,
@@ -58,7 +58,7 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 
 			// Broadcast the new state
 			room.gvarStateMutex.RLock()
-			MulticastMessage(room.clients, Scratch{
+			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method: "set",
 				Value:  room.gvarState[message.Name],
 				Name:   message.Name,
@@ -76,7 +76,7 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 
 			// Broadcast the new state
 			room.gvarStateMutex.RLock()
-			MulticastMessage(room.clients, Scratch{
+			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method: "create",
 				Value:  room.gvarState[message.Name],
 				Name:   message.Name,
@@ -99,7 +99,7 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
-			MulticastMessage(room.clients, Scratch{
+			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method:  "rename",
 				NewName: message.NewName,
 				Name:    message.Name,
@@ -115,7 +115,7 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
-			MulticastMessage(room.clients, Scratch{
+			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method: "delete",
 				Name:   message.Name,
 			}.ToBytes())

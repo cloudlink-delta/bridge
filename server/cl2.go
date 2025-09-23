@@ -29,12 +29,12 @@ func NewCL2PacketFormatter() *CL2PacketFormatter {
 }
 
 // Parse takes a raw message string and returns a structured PacketCL2.
-func (h *CL2PacketFormatter) Parse(message string) (*PacketCL2, bool) {
+func (h *CL2PacketFormatter) Parse(message string) (*Packet_CL2_RxPacket, bool) {
 	for key, re := range h.parsers {
 		if re.MatchString(message) {
 			matches := re.FindStringSubmatch(message)
 			names := re.SubexpNames()
-			packet := &PacketCL2{} // Renamed Packet to PacketCL2
+			packet := &Packet_CL2_RxPacket{} // Renamed Packet to PacketCL2
 
 			// Populate packet struct from named capture groups
 			for i, name := range names {
@@ -78,33 +78,33 @@ func (h *CL2PacketFormatter) Parse(message string) (*PacketCL2, bool) {
 // BuildGlobalResponse creates a JSON packet for a global stream update.
 func BuildGlobalResponse(data string, isSpecialClient bool) ([]byte, error) {
 	if isSpecialClient {
-		resp := CL2Response{
+		resp := Packet_CL2_TxReply{
 			Type: "sf",
-			Data: CL2DataPayload{Type: "gs", Data: data},
+			Data: Packet_CL2_TxData{Type: "gs", Data: data},
 		}
 		return json.Marshal(resp)
 	}
-	resp := CL2SimpleReply{Type: "gs", Data: data}
+	resp := Packet_CL2_TxSimple{Type: "gs", Data: data}
 	return json.Marshal(resp)
 }
 
 // BuildPrivateResponse creates a JSON packet for a private stream update.
 func BuildPrivateResponse(data, recipient string, isSpecialClient bool) ([]byte, error) {
 	if isSpecialClient {
-		resp := CL2Response{
+		resp := Packet_CL2_TxReply{
 			Type: "sf",
 			ID:   recipient,
-			Data: CL2DataPayload{Type: "ps", Data: data},
+			Data: Packet_CL2_TxData{Type: "ps", Data: data},
 		}
 		return json.Marshal(resp)
 	}
-	resp := CL2SimpleReply{Type: "ps", Data: data, ID: recipient}
+	resp := Packet_CL2_TxSimple{Type: "ps", Data: data, ID: recipient}
 	return json.Marshal(resp)
 }
 
 // BuildUserListResponse creates a JSON packet for a user list update.
 func BuildUserListResponse(users []string) ([]byte, error) {
-	resp := CL2SimpleReply{
+	resp := Packet_CL2_TxSimple{
 		Type: "ul",
 		Data: strings.Join(users, ";") + ";",
 	}
@@ -113,14 +113,25 @@ func BuildUserListResponse(users []string) ([]byte, error) {
 
 // BuildVariableResponse creates a JSON packet for a named variable update.
 func BuildVariableResponse(mode, recipient, varName, data string) ([]byte, error) {
-	resp := CL2Response{
+	resp := Packet_CL2_TxReply{
 		Type: "sf",
 		ID:   recipient,
-		Data: CL2DataPayload{
+		Data: Packet_CL2_TxData{
 			Type: "vm",
 			Mode: mode, // "g" or "p"
 			Var:  varName,
 			Data: data,
+		},
+	}
+	return json.Marshal(resp)
+}
+
+func BuildHandshakeResponse(serverVersion string) ([]byte, error) {
+	resp := Packet_CL2_TxReply{
+		Type: "direct",
+		Data: Packet_CL2_TxData{
+			Type: "vers",
+			Data: serverVersion,
 		},
 	}
 	return json.Marshal(resp)
@@ -138,6 +149,15 @@ func CL2HandleMessage(client *Client, msg string) {
 
 	if packet, ok := handler.Parse(msg); ok {
 		switch packet.Command {
+
+		case "sh":
+			// Special Feature Handshake
+			client.Lock()
+			client.handshake = true
+			client.Unlock()
+
+			response, _ := BuildHandshakeResponse(ServerVersion)
+			UnicastMessage(client, response)
 
 		case "set":
 			// Update the client object with the username

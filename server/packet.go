@@ -4,7 +4,7 @@ import "github.com/goccy/go-json"
 
 // This structure represents the JSON formatting used for the current CloudLink formatting scheme.
 // Values that are not specific to one type are represented with any.
-type PacketUPL struct {
+type Packet_CL4 struct {
 	Cmd      string      `json:"cmd"`
 	Name     any         `json:"name,omitempty"`
 	Val      any         `json:"val,omitempty"`
@@ -18,14 +18,14 @@ type PacketUPL struct {
 	Details  string      `json:"details,omitempty"`
 }
 
-func (packet PacketUPL) ToBytes() []byte {
+func (packet Packet_CL4) ToBytes() []byte {
 	marshaled, _ := json.Marshal(packet)
 	return marshaled
 }
 
-// This structure represents the JSON formatting the Scratch cloud variable protocol uses.
+// This structure represents the JSON formatting the Packet_CloudVarScratch cloud variable protocol uses.
 // Values that are not specific to one type are represented with any.
-type Scratch struct {
+type Packet_CloudVarScratch struct {
 	Method    string `json:"method"`
 	ProjectID any    `json:"project_id,omitempty"`
 	Username  string `json:"user,omitempty"`
@@ -34,13 +34,13 @@ type Scratch struct {
 	NewName   any    `json:"new_name,omitempty"`
 }
 
-func (packet Scratch) ToBytes() []byte {
+func (packet Packet_CloudVarScratch) ToBytes() []byte {
 	marshaled, _ := json.Marshal(packet)
 	return marshaled
 }
 
 // This structure is an abstract representation of a CL2 packet.
-type PacketCL2 struct {
+type Packet_CL2_RxPacket struct {
 	Command   string
 	Mode      string
 	Sender    string
@@ -49,21 +49,36 @@ type PacketCL2 struct {
 	Data      string
 }
 
-type CL2SimpleReply struct {
+type Packet_CL2_TxSimple struct {
 	Type string `json:"type"`
 	Data string `json:"data"`
 	ID   string `json:"id,omitempty"`
 }
 
-type CL2DataPayload struct {
+func (packet Packet_CL2_TxSimple) ToBytes() []byte {
+	marshaled, _ := json.Marshal(packet)
+	return marshaled
+}
+
+type Packet_CL2_TxData struct {
 	Type string `json:"type,omitempty"`
 	Mode string `json:"mode,omitempty"`
 	Var  string `json:"var,omitempty"`
 	Data string `json:"data"`
 }
 
-type CL2Response struct {
-	Type string         `json:"type"`
-	Data CL2DataPayload `json:"data"`
-	ID   string         `json:"id,omitempty"`
+func (packet Packet_CL2_TxData) ToBytes() []byte {
+	marshaled, _ := json.Marshal(packet)
+	return marshaled
+}
+
+type Packet_CL2_TxReply struct {
+	Type string            `json:"type"`
+	Data Packet_CL2_TxData `json:"data"`
+	ID   string            `json:"id,omitempty"`
+}
+
+func (packet Packet_CL2_TxReply) ToBytes() []byte {
+	marshaled, _ := json.Marshal(packet)
+	return marshaled
 }
