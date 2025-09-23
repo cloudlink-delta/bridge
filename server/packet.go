@@ -27,4 +27,31 @@ type Scratch struct {
 	NewName   any    `json:"new_name,omitempty"`
 }
 
+// This structure is an abstract representation of a CL2 packet.
+type PacketCL2 struct {
+	Command   string
+	Mode      string
+	Sender    string
+	Recipient string
+	VarName   string
+	Data      string
+}
+
+type CL2SimpleReply struct {
+	Type string `json:"type"`
+	Data string `json:"data"`
+	ID   string `json:"id,omitempty"`
+}
+
+type CL2DataPayload struct {
+	Type string `json:"type,omitempty"`
+	Mode string `json:"mode,omitempty"`
+	Var  string `json:"var,omitempty"`
+	Data string `json:"data"`
+}
+
+type CL2Response struct {
+	Type string         `json:"type"`
+	Data CL2DataPayload `json:"data"`
+	ID   string         `json:"id,omitempty"`
 }
