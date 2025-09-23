@@ -9,7 +9,7 @@ import (
 )
 
 /*
-func containsValueClientlist(slice map[snowflake.ID]*Client, value interface{}) bool {
+func containsValueClientlist(slice map[snowflake.ID]*Client, value any) bool {
 	for _, item := range slice {
 		if item == value {
 			return true
@@ -18,7 +18,7 @@ func containsValueClientlist(slice map[snowflake.ID]*Client, value interface{}) 
 	return false
 }
 
-func containsValue(slice []interface{}, value interface{}) bool {
+func containsValue(slice []any, value any) bool {
 	for _, item := range slice {
 		if item == value {
 			return true
@@ -56,8 +56,8 @@ func (client *Client) TempCopy() *Client {
 }
 
 // Gathers a map of all Snowflake IDs representing Clients in a Room or Manager.
-func GatherSnowflakeIDs(clientstore interface{}) map[interface{}]*Client {
-	allids := make(map[interface{}]*Client)
+func GatherSnowflakeIDs(clientstore any) map[any]*Client {
+	allids := make(map[any]*Client)
 	var readmode uint8
 	var tmproom *Room
 	var tmpmgr *Manager
@@ -110,8 +110,8 @@ func GatherSnowflakeIDs(clientstore interface{}) map[interface{}]*Client {
 }
 
 // Gathers a map of all UUIDs representing Clients in a Room or Manager.
-func GatherUUIDs(clientstore interface{}) map[interface{}]*Client {
-	alluuids := make(map[interface{}]*Client)
+func GatherUUIDs(clientstore any) map[any]*Client {
+	alluuids := make(map[any]*Client)
 	var readmode uint8
 	var tmproom *Room
 	var tmpmgr *Manager
@@ -164,8 +164,8 @@ func GatherUUIDs(clientstore interface{}) map[interface{}]*Client {
 }
 
 // Gathers a map of all UserObjects representing Clients in a Room or Manager.
-func GatherUserObjects(clientstore interface{}) map[interface{}]*Client {
-	alluserobjects := make(map[interface{}]*Client)
+func GatherUserObjects(clientstore any) map[any]*Client {
+	alluserobjects := make(map[any]*Client)
 	var readmode uint8
 	var tmproom *Room
 	var tmpmgr *Manager
@@ -218,8 +218,8 @@ func GatherUserObjects(clientstore interface{}) map[interface{}]*Client {
 }
 
 // Gathers a map of all Usernames representing multiple Clients in a Room or Manager.
-func GatherUsernames(clientstore interface{}) map[interface{}][]*Client {
-	allusernames := make(map[interface{}][]*Client)
+func GatherUsernames(clientstore any) map[any][]*Client {
+	allusernames := make(map[any][]*Client)
 	var readmode uint8
 	var tmproom *Room
 	var tmpmgr *Manager
@@ -272,13 +272,13 @@ func GatherUsernames(clientstore interface{}) map[interface{}][]*Client {
 }
 
 // Takes a UUID, Snowflake ID, Username, or UserObject query and returns either a single Client (UUID, Snowflake, UserObject) or multiple Clients (username).
-func (room *Room) FindClient(query interface{}) interface{} {
+func (room *Room) FindClient(query any) any {
 
 	// TODO: fix this fugly slow mess
 	switch query.(type) {
 
 	// Handle hashtable-converted JSON types
-	case map[string]interface{}:
+	case map[string]any:
 		// Attempt User object search
 		userobjects := GatherUserObjects(room)
 		querystring := string(JSONDump(query))
@@ -300,7 +300,7 @@ func (room *Room) FindClient(query interface{}) interface{} {
 			return uuids[query] // Returns *Client
 		}
 	}
-	// BUG: Attempting to search for an entry of []interface{} type crashes this
+	// BUG: Attempting to search for an entry of []any type crashes this
 	// Attempt username search
 	usernames := GatherUsernames(room)
 	if _, ok := usernames[query]; ok {
@@ -345,15 +345,15 @@ func (room *Room) GenerateUserList() []*UserObject {
 }
 
 // Creates a temporary deep copy of a client's rooms map attribute.
-func TempCopyRooms(origin map[interface{}]*Room) map[interface{}]*Room {
-	clone := make(map[interface{}]*Room, len(origin))
+func TempCopyRooms(origin map[any]*Room) map[any]*Room {
+	clone := make(map[any]*Room, len(origin))
 	for x, y := range origin {
 		clone[x] = y
 	}
 	return clone
 }
 
-func RemoveValue(slice []interface{}, indexRemove int) []interface{} {
+func RemoveValue(slice []any, indexRemove int) []any {
 	// Swap the element to remove with the last element
 	slice[indexRemove] = slice[len(slice)-1]
 
@@ -362,7 +362,7 @@ func RemoveValue(slice []interface{}, indexRemove int) []interface{} {
 	return slice
 }
 
-func GetValue(slice []interface{}, target interface{}) int {
+func GetValue(slice []any, target any) int {
 	for i, value := range slice {
 		if value == target {
 			return i
@@ -372,7 +372,7 @@ func GetValue(slice []interface{}, target interface{}) int {
 }
 
 /*
-func appendToSlice(slice []interface{}, elements ...interface{}) ([]interface{}, error) {
+func appendToSlice(slice []any, elements ...any) ([]any, error) {
 	// Use the ellipsis (...) to pass multiple elements as arguments to append
 	newSlice := append(slice, elements...)
 

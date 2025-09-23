@@ -1,14 +1,14 @@
 package cloudlink
 
 // This structure represents the JSON formatting used for the current CloudLink formatting scheme.
-// Values that are not specific to one type are represented with interface{}.
+// Values that are not specific to one type are represented with any.
 type PacketUPL struct {
 	Cmd      string      `json:"cmd"`
-	Name     interface{} `json:"name,omitempty"`
-	Val      interface{} `json:"val,omitempty"`
-	ID       interface{} `json:"id,omitempty"`
-	Rooms    interface{} `json:"rooms,omitempty"`
-	Listener interface{} `json:"listener,omitempty"`
+	Name     any         `json:"name,omitempty"`
+	Val      any         `json:"val,omitempty"`
+	ID       any         `json:"id,omitempty"`
+	Rooms    any         `json:"rooms,omitempty"`
+	Listener any         `json:"listener,omitempty"`
 	Code     string      `json:"code,omitempty"`
 	CodeID   int         `json:"code_id,omitempty"`
 	Mode     string      `json:"mode,omitempty"`
@@ -17,12 +17,14 @@ type PacketUPL struct {
 }
 
 // This structure represents the JSON formatting the Scratch cloud variable protocol uses.
-// Values that are not specific to one type are represented with interface{}.
+// Values that are not specific to one type are represented with any.
 type Scratch struct {
-	Method    string      `json:"method"`
-	ProjectID interface{} `json:"project_id,omitempty"`
-	Username  string      `json:"user,omitempty"`
-	Value     interface{} `json:"value"`
-	Name      interface{} `json:"name,omitempty"`
-	NewName   interface{} `json:"new_name,omitempty"`
+	Method    string `json:"method"`
+	ProjectID any    `json:"project_id,omitempty"`
+	Username  string `json:"user,omitempty"`
+	Value     any    `json:"value"`
+	Name      any    `json:"name,omitempty"`
+	NewName   any    `json:"new_name,omitempty"`
+}
+
 }

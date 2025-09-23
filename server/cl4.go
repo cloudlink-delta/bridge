@@ -5,12 +5,12 @@ import (
 )
 
 type UserObject struct {
-	Id       string      `json:"id,omitempty"`
-	Username interface{} `json:"username,omitempty"`
-	Uuid     string      `json:"uuid,omitempty"`
+	Id       string `json:"id,omitempty"`
+	Username any    `json:"username,omitempty"`
+	Uuid     string `json:"uuid,omitempty"`
 }
 
-func CL4ProtocolDetect(client *Client) {
+func CLProtocolDetect(client *Client) {
 	if client.protocol == 0 {
 		// Update client attributes
 		client.Lock()
@@ -57,7 +57,7 @@ func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude b
 	})
 }
 
-func (room *Room) BroadcastGmsg(value interface{}) {
+func (room *Room) BroadcastGmsg(value any) {
 	// Update room gmsg state
 	room.gmsgStateMutex.Lock()
 	room.gmsgState = value
@@ -73,7 +73,7 @@ func (room *Room) BroadcastGmsg(value interface{}) {
 	room.gmsgStateMutex.RUnlock()
 }
 
-func (room *Room) BroadcastGvar(name interface{}, value interface{}) {
+func (room *Room) BroadcastGvar(name any, value any) {
 	// Update room gmsg state
 	room.gvarStateMutex.Lock()
 	room.gvarState[name] = value
@@ -250,8 +250,8 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		log.Printf("Searching for ID %s", message.ID)
 		for _, room := range rooms {
 			switch message.ID.(type) {
-			case []interface{}:
-				for _, multiquery := range message.ID.([]interface{}) {
+			case []any:
+				for _, multiquery := range message.ID.([]any) {
 					log.Printf("Room: %s - Multi query entry: %s, Result: %s", room.name, multiquery, room.FindClient(multiquery))
 				}
 
@@ -368,9 +368,9 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			return
 
 		// Multiple rooms
-		case []interface{}:
+		case []any:
 			// Validate datatypes of array
-			for _, elem := range message.Val.([]interface{}) {
+			for _, elem := range message.Val.([]any) {
 				switch elem.(type) {
 				case string:
 				case int64:
@@ -389,7 +389,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 				}
 			}
 			// Subscribe to all rooms
-			for _, name := range message.Val.([]interface{}) {
+			for _, name := range message.Val.([]any) {
 
 				// Create room if it doesn't exist
 				room := client.manager.CreateRoom(name)
@@ -399,7 +399,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			}
 
 		// Single room
-		case interface{}:
+		case any:
 			// Validate datatype
 			switch message.Val.(type) {
 			case string:
@@ -459,9 +459,9 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			defaultroom.SubscribeClient(client)
 
 		// Multiple rooms
-		case []interface{}:
+		case []any:
 			// Validate datatypes of array
-			for _, elem := range message.Val.([]interface{}) {
+			for _, elem := range message.Val.([]any) {
 				switch elem.(type) {
 				case string:
 				case bool:
@@ -484,7 +484,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			rooms := client.TempCopy().rooms
 
 			// Validate room and verify that it was joined
-			for _, _room := range message.Val.([]interface{}) {
+			for _, _room := range message.Val.([]any) {
 				if _, ok := rooms[_room]; ok {
 					room := rooms[_room]
 					room.UnsubscribeClient(client)
@@ -496,7 +496,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			}
 
 		// Single room
-		case interface{}:
+		case any:
 			// Validate datatype
 			switch message.Val.(type) {
 			case string:
@@ -548,10 +548,10 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 	default:
 		// Handle unknown commands
 		UnicastMessage(client, &PacketUPL{
-			Cmd:      "statuscode",
-			Code:     "E:109 | Invalid command",
-			CodeID:   109,
-			Val:      client.GenerateUserObject(),
+			Cmd:    "statuscode",
+			Code:   "E:109 | Invalid command",
+			CodeID: 109,
+			// Val:      client.GenerateUserObject(),
 			Listener: message.Listener,
 		})
 	}

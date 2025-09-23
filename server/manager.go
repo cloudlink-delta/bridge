@@ -17,15 +17,15 @@ type Room struct {
 	clientsMutex sync.RWMutex
 
 	// Global message (GMSG) state
-	gmsgState      interface{}
+	gmsgState      any
 	gmsgStateMutex sync.RWMutex
 
 	// Globar variables (GVAR) states
-	gvarState      map[interface{}]any
+	gvarState      map[any]any
 	gvarStateMutex sync.RWMutex
 
 	// Friendly name for room
-	name interface{}
+	name any
 
 	// Locks states before subscribing/unsubscribing clients
 	sync.RWMutex
@@ -33,7 +33,7 @@ type Room struct {
 
 type Manager struct {
 	// Friendly name for manager
-	name interface{}
+	name any
 
 	// Registered client sessions
 	clients      map[snowflake.ID]*Client
@@ -81,7 +81,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 }
 
 // Dummy Managers function identically to a normal manager. However, they are used for selecting specific clients to multicast to.
-func DummyManager(name interface{}) *Manager {
+func DummyManager(name any) *Manager {
 	return &Manager{
 		clients: make(map[snowflake.ID]*Client),
 		rooms:   make(map[any]*Room),
@@ -105,7 +105,7 @@ func New(name string) *Manager {
 	return manager
 }
 
-func (manager *Manager) CreateRoom(name interface{}) *Room {
+func (manager *Manager) CreateRoom(name any) *Room {
 	manager.roomsMutex.RLock()
 
 	// Access rooms map
@@ -181,7 +181,7 @@ func (room *Room) UnsubscribeClient(client *Client) {
 	}
 }
 
-func (manager *Manager) DeleteRoom(name interface{}) {
+func (manager *Manager) DeleteRoom(name any) {
 	manager.roomsMutex.Lock()
 
 	log.Printf("[%s] Destroying room %s", manager.name, name)

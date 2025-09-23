@@ -29,6 +29,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 	for {
 		// Listen for new messages
 		if _, message, err = client.connection.ReadMessage(); err != nil {
+			log.Printf("Client %s (%s) read error: %s", client.id, client.uuid, err)
 			break
 		}
 
@@ -48,7 +49,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 
 			// Handle requests
 			if cl4packet.Cmd != "" {
-				CL4ProtocolDetect(client)
+				CLProtocolDetect(client)
 				CL4MethodHandler(client, &cl4packet)
 			} else if scratchpacket.Method != "" {
 				ScratchProtocolDetect(client)
