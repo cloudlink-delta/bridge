@@ -4,15 +4,6 @@ import (
 	"github.com/gofiber/contrib/websocket"
 )
 
-func ScratchProtocolDetect(client *Client) {
-	if client.protocol == 0 {
-		// Update client attributes
-		client.Lock()
-		client.protocol = 2 // Scratch
-		client.Unlock()
-	}
-}
-
 // ScratchMethodHandler is a method that gets created when a Scratch-formatted message gets handled by MessageHandler.
 func ScratchMethodHandler(client *Client, message *Packet_CloudVarScratch) {
 	switch message.Method {

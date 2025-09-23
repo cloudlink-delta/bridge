@@ -10,21 +10,6 @@ type UserObject struct {
 	Uuid     string `json:"uuid,omitempty"`
 }
 
-func CLProtocolDetect(client *Client) {
-	if client.protocol == 0 {
-		// Update client attributes
-		client.Lock()
-		client.protocol = 1 // CL4
-		client.Unlock()
-
-		// Creates default room - Should only be generated once per server restart
-		defaultroom := client.manager.CreateRoom("default")
-
-		// Add the client to the room
-		defaultroom.SubscribeClient(client)
-	}
-}
-
 func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude bool) {
 	// Create a dummy manager for selecting clients
 	dummy := DummyManager(room.name)
@@ -40,7 +25,7 @@ func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude b
 		}
 
 		// Require a set username and a compatible protocol
-		if (tmpclient.username == nil) || (tmpclient.protocol != 1) {
+		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL4) {
 			continue
 		}
 

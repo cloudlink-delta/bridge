@@ -34,8 +34,9 @@ func (client *Client) MessageHandler(manager *Manager) {
 		}
 
 		switch client.protocol {
-		case 0: // Detect protocol
-			// Attempt to detect protocol
+
+		// Attempt to detect protocol
+		case Protocol_Detecting:
 
 			// CL2 protcol
 			var cl2packet = NewCL2PacketFormatter()
@@ -44,13 +45,14 @@ func (client *Client) MessageHandler(manager *Manager) {
 
 				// Update client attributes
 				client.Lock()
-				client.protocol = 3 // CL2
+				client.protocol = Protocol_CL2 // CL2
 				client.Unlock()
 
 				// Add the client to the default room
 				defaultroom := client.manager.CreateRoom("default")
 				defaultroom.SubscribeClient(client)
 
+				// Process first packet
 				CL2HandleMessage(client, string(message))
 				continue
 			}
@@ -59,44 +61,57 @@ func (client *Client) MessageHandler(manager *Manager) {
 			var cl4packet Packet_CL4
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
-			} else {
+			} else if cl4packet.Cmd != "" {
 				log.Println("Detected CL4 or CL3 protocol, specific dialect not yet confirmed")
+
+				// Update client attributes
+				client.Lock()
+				client.protocol = Protocol_CL4 // CL4
+				client.Unlock()
+
+				// Add the client to the default room
+				defaultroom := client.manager.CreateRoom("default")
+				defaultroom.SubscribeClient(client)
+
+				// Process first packet
+				CL4MethodHandler(client, &cl4packet)
+				continue
 			}
 
 			// Scratch protocol
 			var scratchpacket Packet_CloudVarScratch
 			if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
-			} else {
-				log.Println("Detected Scratch protocol")
-			}
-
-			// Handle requests
-			if cl4packet.Cmd != "" {
-				CLProtocolDetect(client)
-				CL4MethodHandler(client, &cl4packet)
 			} else if scratchpacket.Method != "" {
-				ScratchProtocolDetect(client)
+				log.Println("Detected Scratch protocol")
+
+				// Update client attributes
+				client.Lock()
+				client.protocol = Protocol_CloudVars
+				client.Unlock()
+
+				// Process first packet
 				ScratchMethodHandler(client, &scratchpacket)
-			} else {
-				client.CloseWithMessage(websocket.CloseProtocolError, "Couldn't identify protocol")
+				continue
 			}
 
-		case 1: // CL4
+			client.CloseWithMessage(websocket.CloseProtocolError, "Couldn't identify protocol")
+
+		case Protocol_CL4: // CL4
 			var cl4packet Packet_CL4
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			}
 			CL4MethodHandler(client, &cl4packet)
 
-		case 2: // Scratch
+		case Protocol_CloudVars: // Scratch
 			var scratchpacket Packet_CloudVarScratch
 			if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			}
 			ScratchMethodHandler(client, &scratchpacket)
 
-		case 3: // CL2
+		case Protocol_CL2: // CL2
 			CL2HandleMessage(client, string(message))
 		}
 	}

@@ -152,7 +152,7 @@ func (room *Room) SubscribeClient(client *Client) {
 	protocol := client.protocol
 	usernameset := (client.username != nil)
 	client.RUnlock()
-	if protocol == 1 && usernameset {
+	if protocol == Protocol_CL4 && usernameset {
 		room.BroadcastUserlistEvent("add", client, false)
 	}
 }
@@ -176,7 +176,7 @@ func (room *Room) UnsubscribeClient(client *Client) {
 	protocol := client.protocol
 	usernameset := (client.username != nil)
 	client.RUnlock()
-	if protocol == 1 && usernameset {
+	if protocol == Protocol_CL4 && usernameset {
 		room.BroadcastUserlistEvent("remove", client, true)
 	}
 }

@@ -16,10 +16,19 @@ type Client struct {
 	id              snowflake.ID
 	uuid            uuid.UUID
 	username        any
-	protocol        uint8 // 0 - Unset, 1 - CL4, 2 - Scratch, 3 - CL2
+	protocol        string
 	rooms           map[any]*Room
 	handshake       bool
 
 	// Lock state for rooms
 	sync.RWMutex
 }
+
+// Define protocols
+const (
+	Protocol_Detecting = ""
+	Protocol_CL2       = "cl2"
+	Protocol_CL3       = "cl3"
+	Protocol_CL4       = "cl4"
+	Protocol_CloudVars = "cloudvar"
+)
