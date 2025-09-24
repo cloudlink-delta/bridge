@@ -106,12 +106,12 @@ func New(name string) *Manager {
 }
 
 func (manager *Manager) CreateRoom(name any) *Room {
-	manager.roomsMutex.RLock()
+	manager.roomsMutex.Lock()
 
 	// Access rooms map
 	_, exists := manager.rooms[name]
 
-	manager.roomsMutex.RUnlock()
+	manager.roomsMutex.Unlock()
 
 	if !exists {
 		manager.roomsMutex.Lock()
@@ -127,6 +127,8 @@ func (manager *Manager) CreateRoom(name any) *Room {
 		}
 
 		manager.roomsMutex.Unlock()
+	} else {
+		log.Printf("[%s] Room %s already exists", manager.name, name)
 	}
 
 	// Return the room even if it already exists
@@ -148,10 +150,10 @@ func (room *Room) SubscribeClient(client *Client) {
 	client.Unlock()
 
 	// Handle CL room states
-	client.RLock()
+	client.Lock()
 	protocol := client.protocol
 	usernameset := (client.username != nil)
-	client.RUnlock()
+	client.Unlock()
 	if protocol == Protocol_CL4 && usernameset {
 		room.BroadcastUserlistEvent("add", client, false)
 	}
@@ -172,10 +174,10 @@ func (room *Room) UnsubscribeClient(client *Client) {
 	client.Unlock()
 
 	// Handle CL room states
-	client.RLock()
+	client.Lock()
 	protocol := client.protocol
 	usernameset := (client.username != nil)
-	client.RUnlock()
+	client.Unlock()
 	if protocol == Protocol_CL4 && usernameset {
 		room.BroadcastUserlistEvent("remove", client, true)
 	}
@@ -221,35 +223,35 @@ func (manager *Manager) RemoveClient(client *Client) {
 
 // findClientByUsername iterates through all clients in the manager to find one by its username.
 func findClientByUsername(manager *Manager, username any) (*Client, bool) {
-	manager.clientsMutex.RLock()
-	defer manager.clientsMutex.RUnlock()
+	manager.clientsMutex.Lock()
+	defer manager.clientsMutex.Unlock()
 
 	for _, client := range manager.clients {
-		client.RLock()
+		client.Lock()
 		// Check if the username is set and matches
 		if client.username != nil && client.username == username {
-			client.RUnlock()
+			client.Unlock()
 			return client, true
 		}
-		client.RUnlock()
+		client.Unlock()
 	}
 	return nil, false
 }
 
 // getAllUsernamesInRoom collects the usernames of all clients subscribed to a specific room.
 func getAllUsernamesInRoom(room *Room) []string {
-	room.clientsMutex.RLock()
-	defer room.clientsMutex.RUnlock()
+	room.clientsMutex.Lock()
+	defer room.clientsMutex.Unlock()
 
 	usernames := make([]string, 0, len(room.clients))
 	for _, client := range room.clients {
-		client.RLock()
+		client.Lock()
 		if client.username != nil {
 			if name, ok := client.username.(string); ok {
 				usernames = append(usernames, name)
 			}
 		}
-		client.RUnlock()
+		client.Unlock()
 	}
 	return usernames
 }
@@ -259,17 +261,17 @@ func getClientGroupsByHandshake(room *Room) (specialClients, standardClients map
 	specialClients = make(map[snowflake.ID]*Client)
 	standardClients = make(map[snowflake.ID]*Client)
 
-	room.clientsMutex.RLock()
-	defer room.clientsMutex.RUnlock()
+	room.clientsMutex.Lock()
+	defer room.clientsMutex.Unlock()
 
 	for id, client := range room.clients {
-		client.RLock()
+		client.Lock()
 		if client.handshake {
 			specialClients[id] = client
 		} else {
 			standardClients[id] = client
 		}
-		client.RUnlock()
+		client.Unlock()
 	}
 	return specialClients, standardClients
 }

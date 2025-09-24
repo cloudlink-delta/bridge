@@ -28,10 +28,10 @@ func containsValue(slice []any, value any) bool {
 }
 */
 
-// Make a temporary-use copy of a client with RWMutex read locks. This is to safely permit multiple reads from a client.
+// Make a temporary-use copy of a client with Mutex read locks. This is to safely permit multiple reads from a client.
 func (client *Client) TempCopy() *Client {
 	// Acquire client read lock
-	client.RLock()
+	client.Lock()
 
 	// Copy values
 	username := client.username
@@ -42,7 +42,7 @@ func (client *Client) TempCopy() *Client {
 	handshake := client.handshake
 
 	// Free client read lock
-	client.RUnlock()
+	client.Unlock()
 
 	// Return copied client
 	return &Client{
@@ -77,11 +77,11 @@ func GatherSnowflakeIDs(clientstore any) map[any]*Client {
 	switch readmode {
 	case 1:
 		tmproom = clientstore.(*Room)
-		tmproom.RLock()
+		tmproom.Lock()
 		clients = tmproom.clients
 	case 2:
 		tmpmgr = clientstore.(*Manager)
-		tmpmgr.RLock()
+		tmpmgr.Lock()
 		clients = tmpmgr.clients
 	}
 
@@ -100,9 +100,9 @@ func GatherSnowflakeIDs(clientstore any) map[any]*Client {
 	// Free lock
 	switch readmode {
 	case 1:
-		tmproom.RUnlock()
+		tmproom.Unlock()
 	case 2:
-		tmpmgr.RUnlock()
+		tmpmgr.Unlock()
 	}
 
 	// Return collected Snowflake IDs as strings
@@ -131,11 +131,11 @@ func GatherUUIDs(clientstore any) map[any]*Client {
 	switch readmode {
 	case 1:
 		tmproom = clientstore.(*Room)
-		tmproom.RLock()
+		tmproom.Lock()
 		clients = tmproom.clients
 	case 2:
 		tmpmgr = clientstore.(*Manager)
-		tmpmgr.RLock()
+		tmpmgr.Lock()
 		clients = tmpmgr.clients
 	}
 
@@ -154,9 +154,9 @@ func GatherUUIDs(clientstore any) map[any]*Client {
 	// Free lock
 	switch readmode {
 	case 1:
-		tmproom.RUnlock()
+		tmproom.Unlock()
 	case 2:
-		tmpmgr.RUnlock()
+		tmpmgr.Unlock()
 	}
 
 	// Return collected UUIDs as strings
@@ -185,11 +185,11 @@ func GatherUserObjects(clientstore any) map[any]*Client {
 	switch readmode {
 	case 1:
 		tmproom = clientstore.(*Room)
-		tmproom.RLock()
+		tmproom.Lock()
 		clients = tmproom.clients
 	case 2:
 		tmpmgr = clientstore.(*Manager)
-		tmpmgr.RLock()
+		tmpmgr.Lock()
 		clients = tmpmgr.clients
 	}
 
@@ -208,9 +208,9 @@ func GatherUserObjects(clientstore any) map[any]*Client {
 	// Free lock
 	switch readmode {
 	case 1:
-		tmproom.RUnlock()
+		tmproom.Unlock()
 	case 2:
-		tmpmgr.RUnlock()
+		tmpmgr.Unlock()
 	}
 
 	// Return collected UserObjects
@@ -239,11 +239,11 @@ func GatherUsernames(clientstore any) map[any][]*Client {
 	switch readmode {
 	case 1:
 		tmproom = clientstore.(*Room)
-		tmproom.RLock()
+		tmproom.Lock()
 		clients = tmproom.clients
 	case 2:
 		tmpmgr = clientstore.(*Manager)
-		tmpmgr.RLock()
+		tmpmgr.Lock()
 		clients = tmpmgr.clients
 	}
 
@@ -262,9 +262,9 @@ func GatherUsernames(clientstore any) map[any][]*Client {
 	// Free lock
 	switch readmode {
 	case 1:
-		tmproom.RUnlock()
+		tmproom.Unlock()
 	case 2:
-		tmpmgr.RUnlock()
+		tmpmgr.Unlock()
 	}
 
 	// Return collected usernames
@@ -313,8 +313,8 @@ func (room *Room) FindClient(query any) any {
 
 // Generates a value for client identification.
 func (client *Client) GenerateUserObject() *UserObject {
-	client.RLock()
-	defer client.RUnlock()
+	client.Lock()
+	defer client.Unlock()
 	if client.username != nil {
 		return &UserObject{
 			Id:       fmt.Sprint(client.id),

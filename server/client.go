@@ -16,13 +16,14 @@ type Client struct {
 	id              snowflake.ID
 	uuid            uuid.UUID
 	username        any
+	nameset         bool
 	protocol        string
 	dialect         int
 	rooms           map[any]*Room
 	handshake       bool
 
 	// Lock state for rooms
-	sync.RWMutex
+	sync.Mutex
 }
 
 // Define protocols
