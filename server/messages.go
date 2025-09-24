@@ -17,11 +17,8 @@ func MulticastMessage(clients map[snowflake.ID]*Client, message []byte) {
 
 // UnicastMessageAny broadcasts a payload to a singular client.
 func UnicastMessage(client *Client, message []byte) {
-	// Lock state for the websocket connection to prevent accidental concurrent writes to websocket
-	client.connectionMutex.Lock()
 	// Attempt to send message to client
 	if err := client.connection.WriteMessage(websocket.TextMessage, message); err != nil {
 		log.Printf("Client %s (%s) send error: %s", client.id, client.uuid, err)
 	}
-	client.connectionMutex.Unlock()
 }

@@ -1,6 +1,10 @@
 package cloudlink
 
-import "github.com/goccy/go-json"
+import (
+	"fmt"
+
+	"github.com/goccy/go-json"
+)
 
 // This structure represents the JSON formatting used for the current CloudLink formatting scheme.
 // Values that are not specific to one type are represented with any.
@@ -21,6 +25,10 @@ type Packet_UPL struct {
 func (packet Packet_UPL) ToBytes() []byte {
 	marshaled, _ := json.Marshal(packet)
 	return marshaled
+}
+
+func (packet Packet_UPL) String() string {
+	return fmt.Sprintf("cmd: %s, name: %v, val: %v, id: %v, rooms: %v, listener: %v, code: %v, code_id: %v, mode: %v, origin: %v, details: %v", packet.Cmd, packet.Name, packet.Val, packet.ID, packet.Rooms, packet.Listener, packet.Code, packet.CodeID, packet.Mode, packet.Origin, packet.Details)
 }
 
 // This structure represents the JSON formatting the Packet_CloudVarScratch cloud variable protocol uses.

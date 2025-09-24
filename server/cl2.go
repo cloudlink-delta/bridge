@@ -152,18 +152,14 @@ func CL2HandleMessage(client *Client, msg string) {
 
 		case "sh":
 			// Special Feature Handshake
-			client.Lock()
 			client.handshake = true
-			client.Unlock()
 
 			response, _ := BuildHandshakeResponse(ServerVersion)
 			UnicastMessage(client, response)
 
 		case "set":
 			// Update the client object with the username
-			client.Lock()
 			client.username = packet.Sender
-			client.Unlock()
 
 			log.Println("New username:", client.username)
 
@@ -174,9 +170,7 @@ func CL2HandleMessage(client *Client, msg string) {
 
 		case "gs":
 			// Update the global message state within the room
-			defaultRoom.gmsgStateMutex.Lock()
 			defaultRoom.gmsgState = packet.Data
-			defaultRoom.gmsgStateMutex.Unlock()
 
 			// Get client groups from the default room
 			specialClients, standardClients := getClientGroupsByHandshake(defaultRoom)

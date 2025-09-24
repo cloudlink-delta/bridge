@@ -44,9 +44,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 				log.Println("Detected CL2 protocol")
 
 				// Update client attributes
-				client.Lock()
 				client.protocol = Protocol_CL2 // CL2
-				client.Unlock()
 
 				// Add the client to the default room
 				defaultroom := client.manager.CreateRoom("default")
@@ -64,7 +62,6 @@ func (client *Client) MessageHandler(manager *Manager) {
 			} else if cl4packet.Cmd != "" {
 
 				// Update client attributes
-				client.Lock()
 				client.protocol = Protocol_CL4
 
 				// Detect dialect
@@ -98,7 +95,6 @@ func (client *Client) MessageHandler(manager *Manager) {
 					log.Println("Dialect detection failed, assuming CL3 protocol with v0.1.5 (or older) dialect")
 					client.dialect = Dialect_CL3_0_1_5
 				}
-				client.Unlock()
 
 				// Add the client to the default room
 				defaultroom := client.manager.CreateRoom("default")
@@ -117,9 +113,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 				log.Println("Detected Scratch protocol")
 
 				// Update client attributes
-				client.Lock()
 				client.protocol = Protocol_CloudVars
-				client.Unlock()
 
 				// Process first packet
 				ScratchMethodHandler(client, &scratchpacket)

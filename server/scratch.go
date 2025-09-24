@@ -30,7 +30,6 @@ func ScratchMethodHandler(client *Client, message *Packet_CloudVarScratch) {
 		room.SubscribeClient(client)
 
 		// Update variable states
-		room.gvarStateMutex.RLock()
 		for name, value := range room.gvarState {
 			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method: "set",
@@ -38,56 +37,43 @@ func ScratchMethodHandler(client *Client, message *Packet_CloudVarScratch) {
 				Name:   name,
 			}.ToBytes())
 		}
-		room.gvarStateMutex.RUnlock()
 
 	case "set":
 		for _, room := range client.rooms { // Should only ever have 1 entry
 			// Update room gvar state
-			room.gvarStateMutex.Lock()
 			room.gvarState[message.Name] = message.Value
-			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
-			room.gvarStateMutex.RLock()
 			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method: "set",
 				Value:  room.gvarState[message.Name],
 				Name:   message.Name,
 			}.ToBytes())
-			room.gvarStateMutex.RUnlock()
 		}
 
 	case "create":
 		for _, room := range client.rooms { // Should only ever have 1 entry
 
 			// Update room gvar state
-			room.gvarStateMutex.Lock()
 			room.gvarState[message.Name] = message.Value
-			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
-			room.gvarStateMutex.RLock()
 			MulticastMessage(room.clients, Packet_CloudVarScratch{
 				Method: "create",
 				Value:  room.gvarState[message.Name],
 				Name:   message.Name,
 			}.ToBytes())
-			room.gvarStateMutex.RUnlock()
 		}
 
 	case "rename":
 		for _, room := range client.rooms { // Should only ever have 1 entry
 
 			// Retrive old value
-			room.gvarStateMutex.RLock()
 			oldvalue := room.gvarState[message.Name]
-			room.gvarStateMutex.RUnlock()
 
 			// Destroy old value and make a new value
-			room.gvarStateMutex.Lock()
 			delete(room.gvarState, message.Name)
 			room.gvarState[message.NewName] = oldvalue
-			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
 			MulticastMessage(room.clients, Packet_CloudVarScratch{
@@ -101,9 +87,7 @@ func ScratchMethodHandler(client *Client, message *Packet_CloudVarScratch) {
 		for _, room := range client.rooms { // Should only ever have 1 entry
 
 			// Destroy value
-			room.gvarStateMutex.Lock()
 			delete(room.gvarState, message.Name)
-			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
 			MulticastMessage(room.clients, Packet_CloudVarScratch{

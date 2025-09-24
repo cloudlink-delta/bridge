@@ -2,7 +2,6 @@ package cloudlink
 
 import (
 	"log"
-	"sync"
 
 	"github.com/bwmarrin/snowflake"
 	"github.com/gofiber/contrib/websocket"
@@ -13,22 +12,16 @@ var ServerVersion string = "0.1.1-golang"
 
 type Room struct {
 	// Subscribed clients to the room
-	clients      map[snowflake.ID]*Client
-	clientsMutex sync.RWMutex
+	clients map[snowflake.ID]*Client
 
 	// Global message (GMSG) state
-	gmsgState      any
-	gmsgStateMutex sync.RWMutex
+	gmsgState any
 
 	// Globar variables (GVAR) states
-	gvarState      map[any]any
-	gvarStateMutex sync.RWMutex
+	gvarState map[any]any
 
 	// Friendly name for room
 	name any
-
-	// Locks states before subscribing/unsubscribing clients
-	sync.RWMutex
 }
 
 type Manager struct {
@@ -36,12 +29,10 @@ type Manager struct {
 	name any
 
 	// Registered client sessions
-	clients      map[snowflake.ID]*Client
-	clientsMutex sync.RWMutex
+	clients map[snowflake.ID]*Client
 
 	// Rooms storage
-	rooms      map[any]*Room
-	roomsMutex sync.RWMutex
+	rooms map[any]*Room
 
 	// Configuration settings
 	Config struct {
@@ -53,22 +44,13 @@ type Manager struct {
 
 	// Used for generating Snowflake IDs
 	SnowflakeIDNode *snowflake.Node
-
-	// Locks states before registering sessions
-	sync.RWMutex
 }
 
 // NewClient assigns a UUID and Snowflake ID to a websocket client, and returns a initialized Client struct for use with a manager's AddClient.
 func NewClient(conn *websocket.Conn, manager *Manager) *Client {
-	// Request and create a lock before generating ID values
-	manager.clientsMutex.Lock()
-
 	// Generate client ID values
 	client_id := manager.SnowflakeIDNode.Generate()
 	client_uuid := uuid.New()
-
-	// Release the lock
-	manager.clientsMutex.Unlock()
 
 	return &Client{
 		connection: conn,
@@ -106,15 +88,10 @@ func New(name string) *Manager {
 }
 
 func (manager *Manager) CreateRoom(name any) *Room {
-	manager.roomsMutex.Lock()
-
 	// Access rooms map
 	_, exists := manager.rooms[name]
 
-	manager.roomsMutex.Unlock()
-
 	if !exists {
-		manager.roomsMutex.Lock()
 
 		log.Printf("[%s] Creating room %s", manager.name, name)
 
@@ -126,7 +103,6 @@ func (manager *Manager) CreateRoom(name any) *Room {
 			gvarState: make(map[any]any),
 		}
 
-		manager.roomsMutex.Unlock()
 	} else {
 		log.Printf("[%s] Room %s already exists", manager.name, name)
 	}
@@ -136,75 +112,51 @@ func (manager *Manager) CreateRoom(name any) *Room {
 }
 
 func (room *Room) SubscribeClient(client *Client) {
-	room.clientsMutex.Lock()
 
 	// Add client
 	room.clients[client.id] = client
 
-	room.clientsMutex.Unlock()
-	client.Lock()
-
 	// Add pointer to subscribed room in client's state
 	client.rooms[room.name] = room
 
-	client.Unlock()
-
 	// Handle CL room states
-	client.Lock()
 	protocol := client.protocol
 	usernameset := (client.username != nil)
-	client.Unlock()
 	if protocol == Protocol_CL4 && usernameset {
 		room.BroadcastUserlistEvent("add", client, false)
 	}
 }
 
 func (room *Room) UnsubscribeClient(client *Client) {
-	room.clientsMutex.Lock()
 
 	// Remove client
 	delete(room.clients, client.id)
 
-	room.clientsMutex.Unlock()
-	client.Lock()
-
 	// Remove pointer to subscribed room from client's state
 	delete(client.rooms, room.name)
 
-	client.Unlock()
-
 	// Handle CL room states
-	client.Lock()
 	protocol := client.protocol
 	usernameset := (client.username != nil)
-	client.Unlock()
 	if protocol == Protocol_CL4 && usernameset {
 		room.BroadcastUserlistEvent("remove", client, true)
 	}
 }
 
 func (manager *Manager) DeleteRoom(name any) {
-	manager.roomsMutex.Lock()
-
 	log.Printf("[%s] Destroying room %s", manager.name, name)
 
 	// Delete room
 	delete(manager.rooms, name)
-
-	manager.roomsMutex.Unlock()
 }
 
 func (manager *Manager) AddClient(client *Client) {
-	manager.clientsMutex.Lock()
 
 	// Add client
 	manager.clients[client.id] = client
-
-	manager.clientsMutex.Unlock()
 }
 
 func (manager *Manager) RemoveClient(client *Client) {
-	manager.clientsMutex.Lock()
 
 	// Remove client from manager's clients map
 	delete(manager.clients, client.id)
@@ -218,40 +170,28 @@ func (manager *Manager) RemoveClient(client *Client) {
 			manager.DeleteRoom(room.name)
 		}
 	}
-	manager.clientsMutex.Unlock()
 }
 
 // findClientByUsername iterates through all clients in the manager to find one by its username.
 func findClientByUsername(manager *Manager, username any) (*Client, bool) {
-	manager.clientsMutex.Lock()
-	defer manager.clientsMutex.Unlock()
-
 	for _, client := range manager.clients {
-		client.Lock()
 		// Check if the username is set and matches
 		if client.username != nil && client.username == username {
-			client.Unlock()
 			return client, true
 		}
-		client.Unlock()
 	}
 	return nil, false
 }
 
 // getAllUsernamesInRoom collects the usernames of all clients subscribed to a specific room.
 func getAllUsernamesInRoom(room *Room) []string {
-	room.clientsMutex.Lock()
-	defer room.clientsMutex.Unlock()
-
 	usernames := make([]string, 0, len(room.clients))
 	for _, client := range room.clients {
-		client.Lock()
 		if client.username != nil {
 			if name, ok := client.username.(string); ok {
 				usernames = append(usernames, name)
 			}
 		}
-		client.Unlock()
 	}
 	return usernames
 }
@@ -261,17 +201,12 @@ func getClientGroupsByHandshake(room *Room) (specialClients, standardClients map
 	specialClients = make(map[snowflake.ID]*Client)
 	standardClients = make(map[snowflake.ID]*Client)
 
-	room.clientsMutex.Lock()
-	defer room.clientsMutex.Unlock()
-
 	for id, client := range room.clients {
-		client.Lock()
 		if client.handshake {
 			specialClients[id] = client
 		} else {
 			standardClients[id] = client
 		}
-		client.Unlock()
 	}
 	return specialClients, standardClients
 }

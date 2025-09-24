@@ -1,8 +1,6 @@
 package cloudlink
 
 import (
-	"sync"
-
 	"github.com/bwmarrin/snowflake"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/google/uuid"
@@ -10,20 +8,16 @@ import (
 
 // The client struct serves as a template for handling websocket sessions. It stores a client's UUID, Snowflake ID, manager and websocket connection pointer(s).
 type Client struct {
-	connection      *websocket.Conn
-	connectionMutex sync.RWMutex
-	manager         *Manager
-	id              snowflake.ID
-	uuid            uuid.UUID
-	username        any
-	nameset         bool
-	protocol        string
-	dialect         int
-	rooms           map[any]*Room
-	handshake       bool
-
-	// Lock state for rooms
-	sync.Mutex
+	connection *websocket.Conn
+	manager    *Manager
+	id         snowflake.ID
+	uuid       uuid.UUID
+	username   any
+	nameset    bool
+	protocol   string
+	dialect    int
+	rooms      map[any]*Room
+	handshake  bool
 }
 
 // Define protocols
