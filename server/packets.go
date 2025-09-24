@@ -9,6 +9,20 @@ import (
 	"github.com/gofiber/contrib/websocket"
 )
 
+// MulticastMessage broadcasts a payload to multiple clients.
+func MulticastMessage(clients map[snowflake.ID]*Client, message []byte) {
+	for _, client := range clients {
+		UnicastMessage(client, message)
+	}
+}
+
+// UnicastMessageAny broadcasts a payload to a singular client.
+func UnicastMessage(client *Client, message []byte) {
+	if err := client.connection.WriteMessage(websocket.TextMessage, message); err != nil {
+		log.Printf("Client %s (%s) send error: %s", client.id, client.uuid, err)
+	}
+}
+
 // This structure represents the JSON formatting used for the current CloudLink formatting scheme.
 // Values that are not specific to one type are represented with any.
 type Packet_UPL struct {
