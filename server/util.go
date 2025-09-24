@@ -1,32 +1,10 @@
 package cloudlink
 
 import (
-	// "errors"
-
 	"fmt"
 
 	"github.com/bwmarrin/snowflake"
 )
-
-/*
-func containsValueClientlist(slice map[snowflake.ID]*Client, value any) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-
-func containsValue(slice []any, value any) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-*/
 
 // Gathers a map of all Snowflake IDs representing Clients in a Room or Manager.
 func GatherSnowflakeIDs(clientstore any) map[any]*Client {
@@ -260,6 +238,7 @@ func (room *Room) GenerateUserList() []*UserObject {
 }
 
 func RemoveValue(slice []any, indexRemove int) []any {
+
 	// Swap the element to remove with the last element
 	slice[indexRemove] = slice[len(slice)-1]
 
@@ -276,17 +255,3 @@ func GetValue(slice []any, target any) int {
 	}
 	return -1 // Indicates that the value was not found
 }
-
-/*
-func appendToSlice(slice []any, elements ...any) ([]any, error) {
-	// Use the ellipsis (...) to pass multiple elements as arguments to append
-	newSlice := append(slice, elements...)
-
-	// Check if the length of the new slice is as expected
-	if len(newSlice) != len(slice)+len(elements) {
-		return nil, errors.New("failed to append elements to slice")
-	}
-
-	return newSlice, nil
-}
-*/
