@@ -1,6 +1,8 @@
 package cloudlink
 
 import (
+	"fmt"
+
 	"github.com/bwmarrin/snowflake"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/google/uuid"
@@ -51,5 +53,21 @@ func (client *Client) SpoofServerVersion() string {
 		return "0.2.0"
 	default:
 		return "0.1.5"
+	}
+}
+
+// Generates a value for client identification.
+func (client *Client) GenerateUserObject() *UserObject {
+	if client.username != nil {
+		return &UserObject{
+			Id:       fmt.Sprint(client.id),
+			Username: client.username,
+			Uuid:     fmt.Sprint(client.uuid),
+		}
+	} else {
+		return &UserObject{
+			Id:   fmt.Sprint(client.id),
+			Uuid: fmt.Sprint(client.uuid),
+		}
 	}
 }

@@ -244,22 +244,6 @@ func (room *Room) FindClient(query any) any {
 	return nil
 }
 
-// Generates a value for client identification.
-func (client *Client) GenerateUserObject() *UserObject {
-	if client.username != nil {
-		return &UserObject{
-			Id:       fmt.Sprint(client.id),
-			Username: client.username,
-			Uuid:     fmt.Sprint(client.uuid),
-		}
-	} else {
-		return &UserObject{
-			Id:   fmt.Sprint(client.id),
-			Uuid: fmt.Sprint(client.uuid),
-		}
-	}
-}
-
 // Gathers all user objects in a room, and generates a userlist.
 func (room *Room) GenerateUserList() []*UserObject {
 	var objarray []*UserObject
