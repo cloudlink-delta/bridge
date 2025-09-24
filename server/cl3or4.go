@@ -92,31 +92,31 @@ func (room *Room) BroadcastGvar(name any, value any) {
 	room.gvarStateMutex.RUnlock()
 }
 
-	usernameunset := (client.TempCopy().username == nil)
-	if usernameunset {
-		UnicastMessage(client, Packet_CL4{
 func (client *Client) RequireIDBeingSet(message *Packet_UPL) bool {
+	if !(client.TempCopy().nameset) {
+		UnicastMessage(client, Packet_UPL{
 			Cmd:      "statuscode",
 			Code:     "E:111 | ID required",
 			CodeID:   111,
 			Listener: message.Listener,
 		}.ToBytes())
+		return true
 	}
-	return usernameunset
+	return false
 }
 
-	usernameset := (client.TempCopy().username != nil)
-	if usernameset {
-		UnicastMessage(client, Packet_CL4{
 func (client *Client) HandleIDSet(message *Packet_UPL) bool {
+	if client.TempCopy().nameset {
+		UnicastMessage(client, Packet_UPL{
 			Cmd:      "statuscode",
 			Code:     "E:107 | ID already set",
 			CodeID:   107,
 			Val:      client.GenerateUserObject(),
 			Listener: message.Listener,
 		}.ToBytes())
+		return true
 	}
-	return usernameset
+	return false
 }
 
 // CL4MethodHandler is a method that s created when a CL-formatted message gets handled by MessageHandler.
