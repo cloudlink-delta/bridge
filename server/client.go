@@ -2,6 +2,7 @@ package cloudlink
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/bwmarrin/snowflake"
 	"github.com/gofiber/contrib/websocket"

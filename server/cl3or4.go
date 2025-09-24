@@ -423,24 +423,8 @@ func CL4MethodHandler(client *Client, message *Packet_UPL) {
 
 	case "unlink":
 		// Require username to be set before usage
-		if !client.RequireIDBeingSet(message) {
+		if client.RequireIDBeingSet(message) {
 			return
-		}
-
-		unlink_from_all := func() {
-			// Unsubscribe all rooms and rejoin default
-			rooms := client.rooms
-			for _, room := range rooms {
-				room.UnsubscribeClient(client)
-				// Destroy room if empty, but don't destroy default room
-				if len(room.clients) == 0 && (room.name != "default") {
-					client.manager.DeleteRoom(room.name)
-				}
-			}
-
-			// Get default room
-			defaultroom := client.manager.CreateRoom("default")
-			defaultroom.SubscribeClient(client)
 		}
 
 		unlink_from_one := func(inputval any) {
@@ -474,11 +458,26 @@ func CL4MethodHandler(client *Client, message *Packet_UPL) {
 			if _, ok := rooms[value]; ok {
 				room := rooms[value]
 				room.UnsubscribeClient(client)
+				log.Printf("Successfully unlinked client %s from room %s", client.id, value)
+
 				// Destroy room if empty, but don't destroy default room
 				if len(room.clients) == 0 && (room.name != "default") {
 					client.manager.DeleteRoom(room.name)
 				}
 			}
+		}
+
+		unlink_from_all := func() {
+
+			// Unsubscribe all rooms and rejoin default
+			rooms := client.rooms
+			for _, room := range rooms {
+				unlink_from_one(room.name)
+			}
+
+			// Get default room
+			defaultroom := client.manager.CreateRoom("default")
+			defaultroom.SubscribeClient(client)
 		}
 
 		// Detect if single or multiple rooms
@@ -527,9 +526,10 @@ func CL4MethodHandler(client *Client, message *Packet_UPL) {
 
 		// Send status code
 		UnicastMessage(client, Packet_UPL{
-			Cmd:    "statuscode",
-			Code:   "I:100 | OK",
-			CodeID: 100,
+			Cmd:      "statuscode",
+			Code:     "I:100 | OK",
+			CodeID:   100,
+			Listener: message.Listener,
 		}.ToBytes())
 
 	case "direct":
