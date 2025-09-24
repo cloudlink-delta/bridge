@@ -65,36 +65,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 				client.protocol = Protocol_CL4
 
 				// Detect dialect
-				if cl4packet.Cmd == "handshake" {
-					// Check for the new v0.2.0 handshake format
-					if valMap, ok := cl4packet.Val.(map[string]any); ok {
-						_, langExists := valMap["language"]
-						_, versExists := valMap["version"]
-						if langExists && versExists {
-							log.Println("Detected CL4 protocol with v0.2.0 dialect")
-							client.dialect = Dialect_CL4_0_2_0
-						} else {
-							log.Println("Detected CL4 protocol with v0.1.9.x dialect")
-							client.dialect = Dialect_CL4_0_1_9
-						}
-					} else {
-						// val is missing or not an object, indicating the older handshake
-						log.Println("Detected CL4 protocol with v0.1.9.x dialect")
-						client.dialect = Dialect_CL4_0_1_9
-					}
-
-				} else if cl4packet.Cmd == "direct" && isTypeDeclaration(cl4packet.Val) {
-					log.Println("Detected CL3 protocol with v0.1.7 compatible dialect")
-					client.dialect = Dialect_CL3_0_1_7
-
-				} else if cl4packet.Cmd == "link" || cl4packet.Listener != "" {
-					log.Println("Detected CL4 protocol with v0.1.8.x dialect")
-					client.dialect = Dialect_CL4_0_1_8
-
-				} else {
-					log.Println("Dialect detection failed, assuming CL3 protocol with v0.1.5 (or older) dialect")
-					client.dialect = Dialect_CL3_0_1_5
-				}
+				client.DetectDialect(&cl4packet)
 
 				// Add the client to the default room
 				defaultroom := client.manager.CreateRoom("default")

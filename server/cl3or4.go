@@ -104,6 +104,9 @@ func CL4MethodHandler(client *Client, message *Packet_UPL) {
 	switch message.Cmd {
 	case "handshake":
 
+		// Check if the currently selected dialect could be upgraded
+		client.DetectDialect(message)
+
 		// Read attribute
 		handshakeDone := (client.handshake)
 
