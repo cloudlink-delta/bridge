@@ -55,24 +55,25 @@ func (client *Client) MessageHandler(manager *Manager) {
 				continue
 			}
 
-			// CL4 protocol
-			var cl4packet Packet_UPL
-			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
+			// CL3 or CL4 protocol
+			var cl3or4packet Packet_UPL
+			if err := json.Unmarshal([]byte(message), &cl3or4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
-			} else if cl4packet.Cmd != "" {
+			} else if cl3or4packet.Cmd != "" {
 
 				// Update client attributes
-				client.protocol = Protocol_CL4
+				client.protocol = Protocol_CL3or4
+				client.dialect = Dialect_Determining
 
 				// Detect dialect
-				client.DetectDialect(&cl4packet)
+				client.DetectDialect(&cl3or4packet)
 
 				// Add the client to the default room
 				defaultroom := client.manager.CreateRoom("default")
 				defaultroom.SubscribeClient(client)
 
 				// Process first packet
-				CL4MethodHandler(client, &cl4packet)
+				CL4MethodHandler(client, &cl3or4packet)
 				continue
 			}
 
@@ -93,7 +94,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 
 			client.CloseWithMessage(websocket.CloseProtocolError, "Couldn't identify protocol")
 
-		case Protocol_CL4: // CL4
+		case Protocol_CL3or4: // CL4
 			var cl4packet Packet_UPL
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")

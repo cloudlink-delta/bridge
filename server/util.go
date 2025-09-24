@@ -39,7 +39,7 @@ func GatherSnowflakeIDs(clientstore any) map[any]*Client {
 
 		// Require a set username and a compatible protocol
 		tmpclient := client
-		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL4) {
+		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL3or4) {
 			continue
 		}
 
@@ -83,7 +83,7 @@ func GatherUUIDs(clientstore any) map[any]*Client {
 
 		// Require a set username and a compatible protocol
 		tmpclient := client
-		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL4) {
+		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL3or4) {
 			continue
 		}
 
@@ -127,7 +127,7 @@ func GatherUserObjects(clientstore any) map[any]*Client {
 
 		// Require a set username and a compatible protocol
 		tmpclient := client
-		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL4) {
+		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL3or4) {
 			continue
 		}
 
@@ -171,7 +171,7 @@ func GatherUsernames(clientstore any) map[any][]*Client {
 
 		// Require a set username and a compatible protocol
 		tmpclient := client
-		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL4) {
+		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL3or4) {
 			continue
 		}
 

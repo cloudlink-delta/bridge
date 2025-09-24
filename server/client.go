@@ -27,17 +27,18 @@ type Client struct {
 const (
 	Protocol_Detecting = ""
 	Protocol_CL2       = "cl2"
-	Protocol_CL4       = "cl4"
+	Protocol_CL3or4    = "cl4"
 	Protocol_CloudVars = "cloudvar"
 )
 
 // Dialect constants for differentiating between CL protocol versions
 const (
-	Dialect_CL3_0_1_5 = iota // S2.2 compatible, no listeners/MOTD/statuscodes
-	Dialect_CL3_0_1_7        // Supports early MOTD and statuscodes
-	Dialect_CL4_0_1_8        // Supports listeners and rooms, but no handshake
-	Dialect_CL4_0_1_9        // Implements the handshake command
-	Dialect_CL4_0_2_0        // Implements native data types (autoConvert)
+	Dialect_Determining = iota
+	Dialect_CL3_0_1_5   // S2.2 compatible, no listeners/MOTD/statuscodes
+	Dialect_CL3_0_1_7   // Supports early MOTD and statuscodes
+	Dialect_CL4_0_1_8   // Supports listeners and rooms, but no handshake
+	Dialect_CL4_0_1_9   // Implements the handshake command
+	Dialect_CL4_0_2_0   // Implements native data types (autoConvert)
 )
 
 func (client *Client) SpoofServerVersion() string {
@@ -73,6 +74,32 @@ func (client *Client) GenerateUserObject() *UserObject {
 	}
 }
 
+func (client *Client) UpgradeDialect(newdialect int) {
+	if newdialect > client.dialect {
+
+		var basestring string
+		if client.dialect == Dialect_Determining {
+			basestring = fmt.Sprintf("Client %s (%s) detected ", client.id, client.uuid)
+		} else {
+			basestring = fmt.Sprintf("Client %s (%s) upgraded to ", client.id, client.uuid)
+		}
+
+		client.dialect = newdialect
+		switch client.dialect {
+		case Dialect_CL3_0_1_5:
+			log.Println(basestring + "CL3 dialect v0.1.5")
+		case Dialect_CL3_0_1_7:
+			log.Println(basestring + "CL3 dialect v0.1.7")
+		case Dialect_CL4_0_1_8:
+			log.Println(basestring + "CL4 dialect v0.1.8")
+		case Dialect_CL4_0_1_9:
+			log.Println(basestring + "CL4 dialect v0.1.9")
+		case Dialect_CL4_0_2_0:
+			log.Println(basestring + "CL4 dialect v0.2.0")
+		}
+	}
+}
+
 func (client *Client) DetectDialect(cl4packet *Packet_UPL) {
 
 	// Detect dialect
@@ -83,28 +110,21 @@ func (client *Client) DetectDialect(cl4packet *Packet_UPL) {
 			_, langExists := valMap["language"]
 			_, versExists := valMap["version"]
 			if langExists && versExists {
-				log.Println("Detected CL4 protocol with v0.2.0 dialect")
-				client.dialect = Dialect_CL4_0_2_0
+				client.UpgradeDialect(Dialect_CL4_0_2_0)
 			} else {
-				log.Println("Detected CL4 protocol with v0.1.9.x dialect")
-				client.dialect = Dialect_CL4_0_1_9
+				client.UpgradeDialect(Dialect_CL4_0_1_9)
 			}
 		} else {
-			// val is missing or not an object, indicating the older handshake
-			log.Println("Detected CL4 protocol with v0.1.9.x dialect")
-			client.dialect = Dialect_CL4_0_1_9
+			client.UpgradeDialect(Dialect_CL4_0_1_9)
 		}
 
-	} else if cl4packet.Cmd == "direct" && isTypeDeclaration(cl4packet.Val) {
-		log.Println("Detected CL3 protocol with v0.1.7 compatible dialect")
-		client.dialect = Dialect_CL3_0_1_7
+	} else if cl4packet.Cmd == "link" || (cl4packet.Listener != nil && cl4packet.Listener != "") {
+		client.UpgradeDialect(Dialect_CL4_0_1_8)
 
-	} else if cl4packet.Cmd == "link" || cl4packet.Listener != "" {
-		log.Println("Detected CL4 protocol with v0.1.8.x dialect")
-		client.dialect = Dialect_CL4_0_1_8
+	} else if cl4packet.Cmd == "direct" && isTypeDeclaration(cl4packet.Val) {
+		client.UpgradeDialect(Dialect_CL3_0_1_7)
 
 	} else {
-		log.Println("Dialect detection failed, assuming CL3 protocol with v0.1.5 (or older) dialect")
-		client.dialect = Dialect_CL3_0_1_5
+		client.UpgradeDialect(Dialect_CL3_0_1_5)
 	}
 }

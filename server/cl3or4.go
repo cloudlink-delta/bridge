@@ -27,7 +27,7 @@ func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude b
 		}
 
 		// Require a set username and a compatible protocol
-		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL4) {
+		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL3or4) {
 			continue
 		}
 
