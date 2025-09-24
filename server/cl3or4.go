@@ -120,24 +120,6 @@ func (client *Client) HandleIDSet(message *Packet_UPL) bool {
 }
 
 // CL4MethodHandler is a method that s created when a CL-formatted message gets handled by MessageHandler.
-
-	// Check if we can upgrade the dialect detection from 0.1.9 to 0.2.0
-	client.RLock()
-	canUpgrade := (client.dialect == Dialect_CL4_0_1_9)
-	client.RUnlock()
-
-	if canUpgrade {
-		// The signature of v0.2.0 is the use of native types instead of strings for complex values
-		if _, isString := message.Val.(string); !isString {
-			client.Lock()
-			if client.dialect == Dialect_CL4_0_1_9 { // Double-check to avoid race conditions
-				client.dialect = Dialect_CL4_0_2_0
-				log.Printf("Client %s dialect upgraded to CL4 (v0.2.0)", client.id)
-			}
-			client.Unlock()
-		}
-	}
-
 func CL4MethodHandler(client *Client, message *Packet_UPL) {
 	switch message.Cmd {
 	case "handshake":
