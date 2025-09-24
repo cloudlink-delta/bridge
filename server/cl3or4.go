@@ -51,7 +51,7 @@ func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude b
 	}
 
 	// Broadcast state
-	MulticastMessage(dummy.clients, Packet_CL4{
+	MulticastMessage(dummy.clients, Packet_UPL{
 		Cmd:   "ulist",
 		Val:   client.GenerateUserObject(),
 		Mode:  event,
@@ -67,7 +67,7 @@ func (room *Room) BroadcastGmsg(value any) {
 
 	// Broadcast the new state
 	room.gmsgStateMutex.RLock()
-	MulticastMessage(room.clients, Packet_CL4{
+	MulticastMessage(room.clients, Packet_UPL{
 		Cmd:   "gmsg",
 		Val:   room.gmsgState,
 		Rooms: room.name,
@@ -83,7 +83,7 @@ func (room *Room) BroadcastGvar(name any, value any) {
 
 	// Broadcast the new state
 	room.gvarStateMutex.RLock()
-	MulticastMessage(room.clients, Packet_CL4{
+	MulticastMessage(room.clients, Packet_UPL{
 		Cmd:   "gvar",
 		Name:  name,
 		Val:   room.gvarState[name],
@@ -92,10 +92,10 @@ func (room *Room) BroadcastGvar(name any, value any) {
 	room.gvarStateMutex.RUnlock()
 }
 
-func (client *Client) RequireIDBeingSet(message *Packet_CL4) bool {
 	usernameunset := (client.TempCopy().username == nil)
 	if usernameunset {
 		UnicastMessage(client, Packet_CL4{
+func (client *Client) RequireIDBeingSet(message *Packet_UPL) bool {
 			Cmd:      "statuscode",
 			Code:     "E:111 | ID required",
 			CodeID:   111,
@@ -105,10 +105,10 @@ func (client *Client) RequireIDBeingSet(message *Packet_CL4) bool {
 	return usernameunset
 }
 
-func (client *Client) HandleIDSet(message *Packet_CL4) bool {
 	usernameset := (client.TempCopy().username != nil)
 	if usernameset {
 		UnicastMessage(client, Packet_CL4{
+func (client *Client) HandleIDSet(message *Packet_UPL) bool {
 			Cmd:      "statuscode",
 			Code:     "E:107 | ID already set",
 			CodeID:   107,
@@ -120,7 +120,6 @@ func (client *Client) HandleIDSet(message *Packet_CL4) bool {
 }
 
 // CL4MethodHandler is a method that s created when a CL-formatted message gets handled by MessageHandler.
-func CL4MethodHandler(client *Client, message *Packet_CL4) {
 
 	// Check if we can upgrade the dialect detection from 0.1.9 to 0.2.0
 	client.RLock()
@@ -139,6 +138,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 		}
 	}
 
+func CL4MethodHandler(client *Client, message *Packet_UPL) {
 	switch message.Cmd {
 	case "handshake":
 
@@ -155,7 +155,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 
 			// Send the client's IP address
 			if client.manager.Config.CheckIPAddresses {
-				UnicastMessage(client, Packet_CL4{
+				UnicastMessage(client, Packet_UPL{
 					Cmd: "client_ip",
 					Val: client.connection.Conn.RemoteAddr().String(),
 				}.ToBytes())
@@ -163,21 +163,21 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 
 			// Send the server version info
 			log.Printf("Client %s (%s) server version has been spoofed to %s", client.id, client.uuid, client.SpoofServerVersion())
-			UnicastMessage(client, Packet_CL4{
+			UnicastMessage(client, Packet_UPL{
 				Cmd: "server_version",
 				Val: client.SpoofServerVersion(),
 			}.ToBytes())
 
 			// Send MOTD
 			if client.manager.Config.EnableMOTD {
-				UnicastMessage(client, Packet_CL4{
+				UnicastMessage(client, Packet_UPL{
 					Cmd: "motd",
 					Val: client.manager.Config.MOTDMessage + " (Running on v" + ServerVersion + ")",
 				}.ToBytes())
 			}
 
 			// Send Client's object
-			UnicastMessage(client, Packet_CL4{
+			UnicastMessage(client, Packet_UPL{
 				Cmd: "client_obj",
 				Val: client.GenerateUserObject(),
 			}.ToBytes())
@@ -185,12 +185,12 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 			// Send gmsg, ulist, and gvar states
 			rooms := client.TempCopy().rooms
 			for _, room := range rooms {
-				UnicastMessage(client, Packet_CL4{
+				UnicastMessage(client, Packet_UPL{
 					Cmd:   "gmsg",
 					Val:   room.gmsgState,
 					Rooms: room.name,
 				}.ToBytes())
-				UnicastMessage(client, Packet_CL4{
+				UnicastMessage(client, Packet_UPL{
 					Cmd:   "ulist",
 					Mode:  "set",
 					Val:   room.GenerateUserList(),
@@ -198,7 +198,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 				}.ToBytes())
 				room.gvarStateMutex.RLock()
 				for name, value := range room.gvarState {
-					UnicastMessage(client, Packet_CL4{
+					UnicastMessage(client, Packet_UPL{
 						Cmd:   "gvar",
 						Name:  name,
 						Val:   value,
@@ -210,7 +210,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 		}
 
 		// Send status code
-		UnicastMessage(client, Packet_CL4{
+		UnicastMessage(client, Packet_UPL{
 			Cmd:    "statuscode",
 			Code:   "I:100 | OK",
 			CodeID: 100,
@@ -220,7 +220,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 		// Check if required Val argument is provided
 		switch message.Val.(type) {
 		case nil:
-			UnicastMessage(client, Packet_CL4{
+			UnicastMessage(client, Packet_UPL{
 				Cmd:     "statuscode",
 				Code:    "E:101 | Syntax",
 				CodeID:  101,
@@ -289,7 +289,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 		case bool:
 		default:
 			// Send status code
-			UnicastMessage(client, Packet_CL4{
+			UnicastMessage(client, Packet_UPL{
 				Cmd:      "statuscode",
 				Code:     "E:102 | Datatype",
 				CodeID:   102,
@@ -307,13 +307,14 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 		// Update client attributes
 		client.Lock()
 		client.username = message.Val
+		client.nameset = true
 		client.Unlock()
 
 		// Use default room
 		rooms := client.TempCopy().rooms
 		for _, room := range rooms {
 			room.BroadcastUserlistEvent("add", client, true)
-			UnicastMessage(client, Packet_CL4{
+			UnicastMessage(client, Packet_UPL{
 				Cmd:   "ulist",
 				Mode:  "set",
 				Val:   room.GenerateUserList(),
@@ -322,7 +323,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 		}
 
 		// Send status code
-		UnicastMessage(client, Packet_CL4{
+		UnicastMessage(client, Packet_UPL{
 			Cmd:      "statuscode",
 			Code:     "I:100 | OK",
 			CodeID:   100,
@@ -375,11 +376,13 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 			return
 		}
 
+		log.Printf("Linking client %s to %v...", client.id, message.Val)
+
 		// Detect if single or multiple rooms
 		switch message.Val.(type) {
 
 		case nil:
-			UnicastMessage(client, Packet_CL4{
+			UnicastMessage(client, Packet_UPL{
 				Cmd:     "statuscode",
 				Code:    "E:101 | Syntax",
 				CodeID:  101,
@@ -398,7 +401,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 				case bool:
 				default:
 					// Send status code
-					UnicastMessage(client, Packet_CL4{
+					UnicastMessage(client, Packet_UPL{
 						Cmd:      "statuscode",
 						Code:     "E:102 | Datatype",
 						CodeID:   102,
@@ -416,6 +419,8 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 
 				// Add the client to the room
 				room.SubscribeClient(client)
+
+				log.Println("Successfully linked client", client.id, "to", name)
 			}
 
 		// Single room
@@ -428,7 +433,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 			case bool:
 			default:
 				// Send status code
-				UnicastMessage(client, Packet_CL4{
+				UnicastMessage(client, Packet_UPL{
 					Cmd:      "statuscode",
 					Code:     "E:102 | Datatype",
 					CodeID:   102,
@@ -444,10 +449,11 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 
 			// Add the client to the room
 			room.SubscribeClient(client)
+			log.Println("Successfully linked client", client.id, "to", message.Val)
 		}
 
 		// Send status code
-		UnicastMessage(client, Packet_CL4{
+		UnicastMessage(client, Packet_UPL{
 			Cmd:    "statuscode",
 			Code:   "I:100 | OK",
 			CodeID: 100,
@@ -489,7 +495,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 				case float64:
 				default:
 					// Send status code
-					UnicastMessage(client, Packet_CL4{
+					UnicastMessage(client, Packet_UPL{
 						Cmd:      "statuscode",
 						Code:     "E:102 | Datatype",
 						CodeID:   102,
@@ -525,7 +531,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 			case float64:
 			default:
 				// Send status code
-				UnicastMessage(client, Packet_CL4{
+				UnicastMessage(client, Packet_UPL{
 					Cmd:      "statuscode",
 					Code:     "E:102 | Datatype",
 					CodeID:   102,
@@ -550,7 +556,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 		}
 
 		// Send status code
-		UnicastMessage(client, Packet_CL4{
+		UnicastMessage(client, Packet_UPL{
 			Cmd:    "statuscode",
 			Code:   "I:100 | OK",
 			CodeID: 100,
@@ -567,7 +573,7 @@ func CL4MethodHandler(client *Client, message *Packet_CL4) {
 
 	default:
 		// Handle unknown commands
-		UnicastMessage(client, Packet_CL4{
+		UnicastMessage(client, Packet_UPL{
 			Cmd:    "statuscode",
 			Code:   "E:109 | Invalid command",
 			CodeID: 109,

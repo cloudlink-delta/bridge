@@ -58,7 +58,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 			}
 
 			// CL4 protocol
-			var cl4packet Packet_CL4
+			var cl4packet Packet_UPL
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			} else if cl4packet.Cmd != "" {
@@ -116,7 +116,7 @@ func (client *Client) MessageHandler(manager *Manager) {
 			client.CloseWithMessage(websocket.CloseProtocolError, "Couldn't identify protocol")
 
 		case Protocol_CL4: // CL4
-			var cl4packet Packet_CL4
+			var cl4packet Packet_UPL
 			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
 				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
 			}

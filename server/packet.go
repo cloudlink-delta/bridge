@@ -4,7 +4,7 @@ import "github.com/goccy/go-json"
 
 // This structure represents the JSON formatting used for the current CloudLink formatting scheme.
 // Values that are not specific to one type are represented with any.
-type Packet_CL4 struct {
+type Packet_UPL struct {
 	Cmd      string      `json:"cmd"`
 	Name     any         `json:"name,omitempty"`
 	Val      any         `json:"val,omitempty"`
@@ -18,7 +18,7 @@ type Packet_CL4 struct {
 	Details  string      `json:"details,omitempty"`
 }
 
-func (packet Packet_CL4) ToBytes() []byte {
+func (packet Packet_UPL) ToBytes() []byte {
 	marshaled, _ := json.Marshal(packet)
 	return marshaled
 }
