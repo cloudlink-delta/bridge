@@ -11,23 +11,6 @@ type UserObject struct {
 	Uuid     string `json:"uuid,omitempty"`
 }
 
-func (client *Client) SpoofServerVersion() string {
-	switch client.dialect {
-	case Dialect_CL3_0_1_5:
-		return "0.1.5"
-	case Dialect_CL3_0_1_7:
-		return "0.1.7"
-	case Dialect_CL4_0_1_8:
-		return "0.1.8"
-	case Dialect_CL4_0_1_9:
-		return "0.1.9"
-	case Dialect_CL4_0_2_0:
-		return "0.2.0"
-	default:
-		return "0.1.5"
-	}
-}
-
 func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude bool) {
 	// Create a dummy manager for selecting clients
 	dummy := DummyManager(room.name)
