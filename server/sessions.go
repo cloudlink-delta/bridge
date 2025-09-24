@@ -167,13 +167,3 @@ func SessionHandler(con *websocket.Conn, manager *Manager) {
 	// Begin handling messages throughout the lifespan of the connection
 	client.MessageHandler(manager)
 }
-
-// isTypeDeclaration is a helper to check for the CL3 direct/type command
-func isTypeDeclaration(val any) bool {
-	if valMap, ok := val.(map[string]any); ok {
-		if cmd, ok := valMap["cmd"].(string); ok && cmd == "type" {
-			return true
-		}
-	}
-	return false
-}

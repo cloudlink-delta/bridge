@@ -255,3 +255,13 @@ func GetValue(slice []any, target any) int {
 	}
 	return -1 // Indicates that the value was not found
 }
+
+// isTypeDeclaration is a helper to check for the CL3 direct/type command
+func isTypeDeclaration(val any) bool {
+	if valMap, ok := val.(map[string]any); ok {
+		if cmd, ok := valMap["cmd"].(string); ok && cmd == "type" {
+			return true
+		}
+	}
+	return false
+}
