@@ -2,6 +2,7 @@ package cloudlink
 
 import (
 	"log"
+	"maps"
 
 	"github.com/bwmarrin/snowflake"
 	"github.com/gofiber/contrib/websocket"
@@ -74,7 +75,7 @@ func DummyManager(name any) *Manager {
 func New(name string) *Manager {
 	node, err := snowflake.NewNode(1)
 	if err != nil {
-		log.Fatalln(err, 3)
+		log.Fatal(err)
 	}
 
 	manager := &Manager{

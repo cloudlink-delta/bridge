@@ -25,8 +25,6 @@ func ScratchMethodHandler(client *Client, message *Packet_CloudVarScratch) {
 
 		// Creates room if it does not exist already
 		room := client.manager.CreateRoom(message.ProjectID)
-
-		// Add the client to the room
 		room.SubscribeClient(client)
 
 		// Update variable states
