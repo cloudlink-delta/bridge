@@ -3,6 +3,7 @@ package cloudlink
 import (
 	"fmt"
 	"log"
+	"maps"
 )
 
 type UserObject struct {
@@ -223,7 +224,8 @@ func CL4MethodHandler(client *Client, message *Packet_UPL) {
 			return
 		}
 
-		rooms := TempCopyRooms(client.rooms)
+		rooms := map[any]*Room{}
+		maps.Copy(rooms, client.rooms)
 		log.Printf("Searching for ID %s", message.ID)
 		for _, room := range rooms {
 			switch message.ID.(type) {

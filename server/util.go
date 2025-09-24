@@ -275,15 +275,6 @@ func (room *Room) GenerateUserList() []*UserObject {
 	return objarray
 }
 
-// Creates a temporary deep copy of a client's rooms map attribute.
-func TempCopyRooms(origin map[any]*Room) map[any]*Room {
-	clone := make(map[any]*Room, len(origin))
-	for x, y := range origin {
-		clone[x] = y
-	}
-	return clone
-}
-
 func RemoveValue(slice []any, indexRemove int) []any {
 	// Swap the element to remove with the last element
 	slice[indexRemove] = slice[len(slice)-1]

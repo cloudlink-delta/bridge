@@ -162,7 +162,9 @@ func (manager *Manager) RemoveClient(client *Client) {
 	delete(manager.clients, client.id)
 
 	// Unsubscribe from all rooms and free memory by clearing out empty rooms
-	for _, room := range TempCopyRooms(client.rooms) {
+	temp := map[any]*Room{}
+	maps.Copy(temp, client.rooms)
+	for _, room := range temp {
 		room.UnsubscribeClient(client)
 
 		// Destroy room if empty, but don't destroy default room
