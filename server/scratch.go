@@ -1,100 +1,129 @@
 package cloudlink
 
 import (
-	"github.com/gofiber/contrib/websocket"
+	"log"
+
+	"github.com/goccy/go-json"
+	"github.com/kaptinlin/jsonschema"
 )
 
-// ScratchMethodHandler is a method that gets created when a Scratch-formatted message gets handled by MessageHandler.
-func ScratchMethodHandler(client *Client, message *Packet_CloudVarScratch) {
-	switch message.Method {
-	case "handshake":
+type ScratchPacket struct {
+	Method    string `json:"method" jsonschema:"required"`
+	ProjectID string `json:"project_id,omitempty"`
+	User      string `json:"user,omitempty"`
+	Name      any    `json:"name,omitempty"`
+	NewName   any    `json:"new_name,omitempty"`
+	Value     any    `json:"value,omitempty"`
+}
 
-		// Validate datatype of project ID
-		switch message.ProjectID.(type) {
-		case string:
-		case bool:
-		case int64:
-		case float64:
-		default:
-			client.CloseWithMessage(websocket.CloseUnsupportedData, "Invalid Project ID datatype")
+func (s *ScratchPacket) DeriveProtocol() uint {
+	return Protocol_Scratch
+}
+
+func (s *ScratchPacket) DeriveDialect(_ *Client) uint {
+	return Dialect_Undefined
+}
+
+func (s *ScratchPacket) IsJSON() bool {
+	return true
+}
+
+func (s *ScratchPacket) Reader(data []byte) bool {
+	schema := jsonschema.FromStruct[ScratchPacket]()
+	result := schema.Validate(data).IsValid()
+	if !result {
+		return false
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		panic(err)
+	}
+	return true
+}
+
+func (s *ScratchPacket) Bytes() []byte {
+	b, err := json.Marshal(s)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	return b
+}
+
+func (s *ScratchPacket) String() string {
+	return string(s.Bytes())
+}
+
+func (p *ScratchPacket) Handler(c *Client, m *Manager) {
+	switch p.Method {
+	case "handshake":
+		if c.Handshake {
 			return
 		}
-
-		// Update client attributes
-		client.username = message.Username
-
-		// Creates room if it does not exist already
-		room := client.manager.CreateRoom(message.ProjectID)
-		room.SubscribeClient(client)
-
-		// Update variable states
-		for name, value := range room.gvarState {
-			MulticastMessage(room.clients, Packet_CloudVarScratch{
+		c.SetName(p.User)
+		project := m.CreateRoom(p.ProjectID)
+		c.JoinRoom(project)
+		c.UpdateHandshake(true)
+		for name, value := range project.GetAllGvars() {
+			m.Unicast(c, &ScratchPacket{
 				Method: "set",
-				Value:  value,
 				Name:   name,
-			}.ToBytes())
+				Value:  value,
+			})
 		}
 
 	case "set":
-		for _, room := range client.rooms { // Should only ever have 1 entry
-			// Update room gvar state
-			room.gvarState[message.Name] = message.Value
-
-			// Broadcast the new state
-			MulticastMessage(room.clients, Packet_CloudVarScratch{
-				Method: "set",
-				Value:  room.gvarState[message.Name],
-				Name:   message.Name,
-			}.ToBytes())
+		if !c.Handshake {
+			return
 		}
+		project := c.AllRooms()[0]
+		project.SetGvar(p.Name, p.Value)
+		m.BroadcastToRoom(project, &ScratchPacket{
+			Method: "set",
+			Name:   p.Name,
+			Value:  p.Value,
+		})
 
 	case "create":
-		for _, room := range client.rooms { // Should only ever have 1 entry
-
-			// Update room gvar state
-			room.gvarState[message.Name] = message.Value
-
-			// Broadcast the new state
-			MulticastMessage(room.clients, Packet_CloudVarScratch{
-				Method: "create",
-				Value:  room.gvarState[message.Name],
-				Name:   message.Name,
-			}.ToBytes())
+		if !c.Handshake {
+			return
 		}
+		project := c.AllRooms()[0]
+		project.SetGvar(p.Name, p.Value)
+
+		m.BroadcastToRoom(project, &ScratchPacket{
+			Method: "create",
+			Name:   p.Name,
+			Value:  p.Value,
+		})
 
 	case "rename":
-		for _, room := range client.rooms { // Should only ever have 1 entry
-
-			// Retrive old value
-			oldvalue := room.gvarState[message.Name]
-
-			// Destroy old value and make a new value
-			delete(room.gvarState, message.Name)
-			room.gvarState[message.NewName] = oldvalue
-
-			// Broadcast the new state
-			MulticastMessage(room.clients, Packet_CloudVarScratch{
-				Method:  "rename",
-				NewName: message.NewName,
-				Name:    message.Name,
-			}.ToBytes())
+		if !c.Handshake {
+			return
 		}
+		project := c.AllRooms()[0]
+		old := project.GetGvar(p.Name)
+		project.SetGvar(p.NewName, old)
+		project.DeleteGvar(p.Name)
+
+		m.BroadcastToRoom(project, &ScratchPacket{
+			Method:  "rename",
+			Name:    p.Name,
+			NewName: p.NewName,
+		})
 
 	case "delete":
-		for _, room := range client.rooms { // Should only ever have 1 entry
-
-			// Destroy value
-			delete(room.gvarState, message.Name)
-
-			// Broadcast the new state
-			MulticastMessage(room.clients, Packet_CloudVarScratch{
-				Method: "delete",
-				Name:   message.Name,
-			}.ToBytes())
+		if !c.Handshake {
+			return
 		}
+		project := c.AllRooms()[0]
+		project.DeleteGvar(p.Name)
+
+		m.BroadcastToRoom(project, &ScratchPacket{
+			Method: "delete",
+			Name:   p.Name,
+		})
 
 	default:
-		break
+		log.Println("Unknown Scratch Method")
 	}
 }

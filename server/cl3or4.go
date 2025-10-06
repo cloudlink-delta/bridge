@@ -1,554 +1,296 @@
 package cloudlink
 
 import (
-	"fmt"
 	"log"
-	"maps"
+
+	"github.com/bwmarrin/snowflake"
+	"github.com/google/uuid"
+	"github.com/kaptinlin/jsonschema"
+
+	"github.com/goccy/go-json"
 )
 
+type CL3or4Packet struct {
+	Command   string `json:"cmd" jsonschema:"required"`
+	Name      any    `json:"name,omitempty"`
+	Val       any    `json:"val,omitempty"`
+	ID        any    `json:"id,omitempty"`
+	Rooms     any    `json:"rooms,omitempty"`
+	Listener  any    `json:"listener,omitempty"`
+	Code      string `json:"code,omitempty"`
+	CodeID    int    `json:"code_id,omitempty"`
+	Mode      string `json:"mode,omitempty"`
+	Origin    any    `json:"origin,omitempty"`
+	Details   any    `json:"details,omitempty"`
+	Recipient any    `json:"recipient,omitempty"`
+}
+
 type UserObject struct {
-	Id       string `json:"id,omitempty"`
-	Username any    `json:"username,omitempty"`
-	Uuid     string `json:"uuid,omitempty"`
+	ID       snowflake.ID `json:"id,omitempty"`
+	Username any          `json:"username,omitempty"`
+	UUID     uuid.UUID    `json:"uuid,omitempty"`
 }
 
-func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude bool) {
-	// Create a dummy manager for selecting clients
-	dummy := DummyManager(room.name)
-
-	// Separate compatible clients
-	for _, roomclient := range room.clients {
-		tmpclient := roomclient
-
-		// Exclude handler
-		excludeclientid := client.id
-		if exclude && (tmpclient.id == excludeclientid) {
-			continue
-		}
-
-		// Require a set username and a compatible protocol
-		if (tmpclient.username == nil) || (tmpclient.protocol != Protocol_CL3or4) {
-			continue
-		}
-
-		// Add client if passed
-		dummy.AddClient(tmpclient)
-	}
-
-	// Broadcast state
-	MulticastMessage(dummy.clients, Packet_UPL{
-		Cmd:   "ulist",
-		Val:   client.GenerateUserObject(),
-		Mode:  event,
-		Rooms: room.name,
-	}.ToBytes())
+func (p *CL3or4Packet) DeriveProtocol() uint {
+	return Protocol_CL3or4
 }
 
-func (room *Room) BroadcastGmsg(value any) {
-	// Update room gmsg state
-	room.gmsgState = value
+func (p *CL3or4Packet) DeriveDialect(c *Client) uint {
 
-	// Broadcast the new state
-	MulticastMessage(room.clients, Packet_UPL{
-		Cmd:   "gmsg",
-		Val:   room.gmsgState,
-		Rooms: room.name,
-	}.ToBytes())
-}
+	if c.dialect == Dialect_Undefined {
+		if p.Command == "handshake" {
 
-func (room *Room) BroadcastGvar(name any, value any) {
-	// Update room gmsg state
-	room.gvarState[name] = value
-
-	// Broadcast the new state
-	MulticastMessage(room.clients, Packet_UPL{
-		Cmd:   "gvar",
-		Name:  name,
-		Val:   room.gvarState[name],
-		Rooms: room.name,
-	}.ToBytes())
-}
-
-func (client *Client) RequireIDBeingSet(message *Packet_UPL) bool {
-	if !(client.nameset) {
-		UnicastMessage(client, Packet_UPL{
-			Cmd:      "statuscode",
-			Code:     "E:111 | ID required",
-			CodeID:   111,
-			Listener: message.Listener,
-		}.ToBytes())
-		return true
-	}
-	return false
-}
-
-func (client *Client) HandleIDSet(message *Packet_UPL) bool {
-	if client.nameset {
-		UnicastMessage(client, Packet_UPL{
-			Cmd:      "statuscode",
-			Code:     "E:107 | ID already set",
-			CodeID:   107,
-			Val:      client.GenerateUserObject(),
-			Listener: message.Listener,
-		}.ToBytes())
-		return true
-	}
-	return false
-}
-
-// CL4MethodHandler is a method that s created when a CL-formatted message gets handled by MessageHandler.
-func CL4MethodHandler(client *Client, message *Packet_UPL) {
-
-	log.Println(message)
-
-	switch message.Cmd {
-	case "handshake":
-
-		// Check if the currently selected dialect could be upgraded
-		client.DetectDialect(message)
-
-		// Read attribute
-		handshakeDone := (client.handshake)
-
-		// Don't re-broadcast this data if the handshake command was already used
-		if !handshakeDone {
-
-			// Update attribute
-			client.handshake = true
-
-			// Send the client's IP address
-			if client.manager.Config.CheckIPAddresses {
-				UnicastMessage(client, Packet_UPL{
-					Cmd: "client_ip",
-					Val: client.connection.Conn.RemoteAddr().String(),
-				}.ToBytes())
-			}
-
-			// Send the server version info
-			log.Printf("Client %s (%s) server version has been spoofed to %s", client.id, client.uuid, client.SpoofServerVersion())
-			UnicastMessage(client, Packet_UPL{
-				Cmd: "server_version",
-				Val: client.SpoofServerVersion(),
-			}.ToBytes())
-
-			// Send MOTD
-			if client.manager.Config.EnableMOTD {
-				UnicastMessage(client, Packet_UPL{
-					Cmd: "motd",
-					Val: client.manager.Config.MOTDMessage + " (Running on v" + ServerVersion + ")",
-				}.ToBytes())
-			}
-
-			// Send Client's object
-			UnicastMessage(client, Packet_UPL{
-				Cmd: "client_obj",
-				Val: client.GenerateUserObject(),
-			}.ToBytes())
-
-			// Send gmsg, ulist, and gvar states
-			rooms := client.rooms
-			for _, room := range rooms {
-				UnicastMessage(client, Packet_UPL{
-					Cmd:   "gmsg",
-					Val:   room.gmsgState,
-					Rooms: room.name,
-				}.ToBytes())
-				UnicastMessage(client, Packet_UPL{
-					Cmd:   "ulist",
-					Mode:  "set",
-					Val:   room.GenerateUserList(),
-					Rooms: room.name,
-				}.ToBytes())
-				for name, value := range room.gvarState {
-					UnicastMessage(client, Packet_UPL{
-						Cmd:   "gvar",
-						Name:  name,
-						Val:   value,
-						Rooms: room.name,
-					}.ToBytes())
+			// Check for the new v0.2.0 handshake format
+			if valMap, ok := p.Val.(map[string]any); ok {
+				_, langExists := valMap["language"]
+				_, versExists := valMap["version"]
+				if langExists && versExists {
+					c.UpgradeDialect(Dialect_CL4_0_2_0)
+				} else {
+					c.UpgradeDialect(Dialect_CL4_0_1_9)
 				}
-			}
-		}
-
-		// Send status code
-		UnicastMessage(client, Packet_UPL{
-			Cmd:    "statuscode",
-			Code:   "I:100 | OK",
-			CodeID: 100,
-		}.ToBytes())
-
-	case "gmsg":
-		// Check if required Val argument is provided
-		switch message.Val.(type) {
-		case nil:
-			UnicastMessage(client, Packet_UPL{
-				Cmd:     "statuscode",
-				Code:    "E:101 | Syntax",
-				CodeID:  101,
-				Details: "Message missing required val key",
-			}.ToBytes())
-			return
-		}
-
-		// Handle multiple types for room
-		switch message.Rooms.(type) {
-
-		// Value not specified in message
-		case nil:
-			// Use all subscribed rooms
-			rooms := client.rooms
-			for _, room := range rooms {
-				room.BroadcastGmsg(message.Val)
-			}
-
-		// Multiple rooms
-		case []any:
-			for _, room := range message.Rooms.([]any) {
-				rooms := client.rooms
-
-				// Check if room is valid and is subscribed
-				if _, ok := rooms[room]; ok {
-					rooms[room].BroadcastGmsg(message.Val)
-				}
-			}
-
-		// Single room
-		case any:
-			// Check if room is valid and is subscribed
-			rooms := client.rooms
-			if _, ok := rooms[message.Rooms]; ok {
-				rooms[message.Rooms].BroadcastGmsg(message.Val)
-			}
-		}
-
-	case "pmsg":
-		// Require username to be set before usage
-		if client.RequireIDBeingSet(message) {
-			return
-		}
-
-		rooms := map[any]*Room{}
-		maps.Copy(rooms, client.rooms)
-		log.Printf("Searching for ID %s", message.ID)
-		for _, room := range rooms {
-			switch message.ID.(type) {
-			case []any:
-				for _, multiquery := range message.ID.([]any) {
-					log.Printf("Room: %s - Multi query entry: %s, Result: %s", room.name, multiquery, room.FindClient(multiquery))
-				}
-
-			default:
-				log.Printf("Room: %s - Result: %s", room.name, room.FindClient(message.ID))
-			}
-		}
-
-	case "setid":
-		// Val datatype validation
-		switch message.Val.(type) {
-		case string:
-		case int64:
-		case float64:
-		case bool:
-		default:
-			// Send status code
-			UnicastMessage(client, Packet_UPL{
-				Cmd:      "statuscode",
-				Code:     "E:102 | Datatype",
-				CodeID:   102,
-				Details:  "Username value (val) must be a string, boolean, float, or int",
-				Listener: message.Listener,
-			}.ToBytes())
-			return
-		}
-
-		// Prevent changing usernames
-		if client.HandleIDSet(message) {
-			return
-		}
-
-		// Update client attributes
-		client.username = message.Val
-		client.nameset = true
-
-		// Use default room
-		rooms := client.rooms
-		for _, room := range rooms {
-			room.BroadcastUserlistEvent("add", client, true)
-			UnicastMessage(client, Packet_UPL{
-				Cmd:   "ulist",
-				Mode:  "set",
-				Val:   room.GenerateUserList(),
-				Rooms: room.name,
-			}.ToBytes())
-		}
-
-		// Send status code
-		UnicastMessage(client, Packet_UPL{
-			Cmd:      "statuscode",
-			Code:     "I:100 | OK",
-			CodeID:   100,
-			Val:      client.GenerateUserObject(),
-			Listener: message.Listener,
-		}.ToBytes())
-
-	case "gvar":
-		// Handle multiple types for room
-		switch message.Rooms.(type) {
-
-		// Value not specified in message
-		case nil:
-			// Use all subscribed rooms
-			rooms := client.rooms
-			for _, room := range rooms {
-				room.BroadcastGvar(message.Name, message.Val)
-			}
-
-		// Multiple rooms
-		case []any:
-			// Use specified rooms
-			for _, room := range message.Rooms.([]any) {
-				rooms := client.rooms
-
-				// Check if room is valid and is subscribed
-				if _, ok := rooms[room]; ok {
-					rooms[room].BroadcastGvar(message.Name, message.Val)
-				}
-			}
-
-		// Single room
-		case any:
-			// Check if room is valid and is subscribed
-			rooms := client.rooms
-			if _, ok := rooms[message.Rooms]; ok {
-				rooms[message.Rooms].BroadcastGvar(message.Name, message.Val)
-			}
-		}
-
-	case "pvar":
-		// Require username to be set before usage
-		if client.RequireIDBeingSet(message) {
-			return
-		}
-
-	case "link":
-		// Require username to be set before usage
-		if client.RequireIDBeingSet(message) {
-			return
-		}
-
-		log.Printf("Linking client %s to %v...", client.id, message.Val)
-
-		// Detect if single or multiple rooms
-		switch message.Val.(type) {
-
-		case nil:
-			UnicastMessage(client, Packet_UPL{
-				Cmd:      "statuscode",
-				Code:     "E:101 | Syntax",
-				CodeID:   101,
-				Details:  "Message missing required val key",
-				Listener: message.Listener,
-			}.ToBytes())
-			return
-
-		// Multiple rooms
-		case []any:
-			// Validate datatypes of array
-			for _, elem := range message.Val.([]any) {
-				switch elem.(type) {
-				case string:
-				case int64:
-				case float64:
-				case bool:
-				default:
-					// Send status code
-					UnicastMessage(client, Packet_UPL{
-						Cmd:      "statuscode",
-						Code:     "E:102 | Datatype",
-						CodeID:   102,
-						Details:  "Multiple rooms value (val) must be an array of strings, bools, floats, or ints.",
-						Listener: message.Listener,
-					}.ToBytes())
-					return
-				}
-			}
-			// Subscribe to all rooms
-			for _, name := range message.Val.([]any) {
-
-				// Create room if it doesn't exist
-				room := client.manager.CreateRoom(name)
-
-				// Add the client to the room
-				room.SubscribeClient(client)
-
-				log.Println("Successfully linked client", client.id, "to", name)
-			}
-
-		// Single room
-		case any:
-			// Validate datatype
-			switch message.Val.(type) {
-			case string:
-			case int64:
-			case float64:
-			case bool:
-			default:
-				// Send status code
-				UnicastMessage(client, Packet_UPL{
-					Cmd:      "statuscode",
-					Code:     "E:102 | Datatype",
-					CodeID:   102,
-					Details:  "Single room value (val) must be a string, boolean, float, int.",
-					Listener: message.Listener,
-				}.ToBytes())
-				return
-			}
-
-			// Subscribe to single room
-			// Create room if it doesn't exist
-			room := client.manager.CreateRoom(message.Val)
-
-			// Add the client to the room
-			room.SubscribeClient(client)
-			log.Println("Successfully linked client", client.id, "to", message.Val)
-		}
-
-		// Send status code
-		UnicastMessage(client, Packet_UPL{
-			Cmd:      "statuscode",
-			Code:     "I:100 | OK",
-			CodeID:   100,
-			Listener: message.Listener,
-		}.ToBytes())
-
-	case "unlink":
-		// Require username to be set before usage
-		if client.RequireIDBeingSet(message) {
-			return
-		}
-
-		unlink_from_one := func(inputval any) {
-			// Validate datatype
-			var value string
-			switch val := inputval.(type) {
-			case string:
-				value = val
-			case bool:
-				value = fmt.Sprintf("%t", val)
-			case int64:
-				value = fmt.Sprintf("%d", val)
-			case float64:
-				value = fmt.Sprintf("%f", val)
-			default:
-				// Send status code
-				UnicastMessage(client, Packet_UPL{
-					Cmd:      "statuscode",
-					Code:     "E:102 | Datatype",
-					CodeID:   102,
-					Details:  "A single room value (val) must be a string or a number",
-					Listener: message.Listener,
-				}.ToBytes())
-				return
-			}
-
-			// Get currently subscribed rooms
-			rooms := client.rooms
-
-			// Validate if room is joined and remove client
-			if _, ok := rooms[value]; ok {
-				room := rooms[value]
-				room.UnsubscribeClient(client)
-				log.Printf("Successfully unlinked client %s from room %s", client.id, value)
-
-				// Destroy room if empty, but don't destroy default room
-				if len(room.clients) == 0 && (room.name != "default") {
-					client.manager.DeleteRoom(room.name)
-				}
-			}
-		}
-
-		unlink_from_all := func() {
-
-			// Unsubscribe all rooms and rejoin default
-			rooms := client.rooms
-			for _, room := range rooms {
-				unlink_from_one(room.name)
-			}
-
-			// Get default room
-			defaultroom := client.manager.CreateRoom("default")
-			defaultroom.SubscribeClient(client)
-		}
-
-		// Detect if single or multiple rooms
-		switch value := message.Val.(type) {
-
-		case nil:
-			unlink_from_all()
-		case string:
-			if value == "" {
-				unlink_from_all()
 			} else {
-				unlink_from_one(value)
+				c.UpgradeDialect(Dialect_CL4_0_1_9)
 			}
 
-		// Multiple rooms
-		case []any:
-			// Validate datatypes of array
-			for _, elem := range value {
-				switch elem.(type) {
-				case string:
-				case bool:
-				case int64:
-				case float64:
-				default:
-					// Send status code
-					UnicastMessage(client, Packet_UPL{
-						Cmd:      "statuscode",
-						Code:     "E:102 | Datatype",
-						CodeID:   102,
-						Details:  "Multiple rooms value (val[...]) must be an array of strings or numbers",
-						Listener: message.Listener,
-					}.ToBytes())
-					return
-				}
-			}
+		} else if p.Command == "link" || (p.Listener != nil && p.Listener != "") {
+			c.UpgradeDialect(Dialect_CL4_0_1_8)
 
-			// Validate room and verify that it was joined
-			for _, _room := range value {
-				unlink_from_one(_room)
-			}
+		} else if p.Command == "direct" && isTypeDeclaration(p.Val) {
+			c.UpgradeDialect(Dialect_CL3_0_1_7)
 
-		// Single room
-		case any:
-			unlink_from_one(value)
+		} else {
+			c.UpgradeDialect(Dialect_CL3_0_1_5)
 		}
+	}
 
-		// Send status code
-		UnicastMessage(client, Packet_UPL{
-			Cmd:      "statuscode",
-			Code:     "I:100 | OK",
-			CodeID:   100,
-			Listener: message.Listener,
-		}.ToBytes())
+	return c.dialect
+}
 
-	case "direct":
-		// Require username to be set before usage
-		if client.RequireIDBeingSet(message) {
+func (p *CL3or4Packet) IsJSON() bool {
+	return true
+}
+
+// Takes a raw byte array and returns true if it is a structured CL3 or CL4 packet.
+// Also populates the provided packet struct with the extracted parameters.
+func (p *CL3or4Packet) Reader(data []byte) bool {
+	schema := jsonschema.FromStruct[CL3or4Packet]()
+	result := schema.Validate(data).IsValid()
+	if !result {
+		return false
+	}
+	if err := json.Unmarshal(data, &p); err != nil {
+		panic(err)
+	}
+	return true
+}
+
+func (p *CL3or4Packet) String() string {
+	return string(p.Bytes())
+}
+
+func (p *CL3or4Packet) Bytes() []byte {
+	b, err := json.Marshal(p)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	return b
+}
+
+func (p *CL3or4Packet) Handler(c *Client, m *Manager) {
+
+	if p.Command == "direct" && c.dialect == Dialect_CL3_0_1_7 {
+		// Check if we can de-nest the "direct" command's value
+		log.Println("De-nesting 'direct' command value...")
+		if p.Val.(map[string]any)["cmd"] != nil {
+			p.Command = p.Val.(map[string]any)["cmd"].(string)
+			p.Val = p.Val.(map[string]any)["val"]
+		}
+	}
+
+	switch p.Command {
+	case "handshake":
+		if c.Handshake {
+			return
+		}
+		c.UpdateHandshake(true)
+		c.JoinRoom(m.DefaultRoom)
+		p.SendHandshake(c, m)
+		p.SendStatuscode(c, "I:100 | OK", 100, nil, nil)
+	case "gmsg":
+		r := c.Rooms
+		for _, room := range r {
+			m.BroadcastToRoom(room, &CL3or4Packet{
+				Command: "gmsg",
+				Name:    p.Name,
+				Val:     p.Val,
+				Origin:  c.GetUserObject(),
+			})
+		}
+	case "gvar":
+	case "pvar":
+		if !c.NameSet {
+			p.SendStatuscode(c, "E:111 | ID required", 111, nil, nil)
+			return
+		}
+	case "pmsg":
+		if !c.NameSet {
+			p.SendStatuscode(c, "E:111 | ID required", 111, nil, nil)
+			return
+		}
+	case "setid":
+		if c.NameSet {
+			p.SendStatuscode(c, "E:107 | ID already set", 107, nil, nil)
 			return
 		}
 
-	case "echo":
-		UnicastMessage(client, message.ToBytes())
+		// Client does not support the handshake command
+		if c.dialect < Dialect_CL3_0_1_7 {
+			c.UpdateHandshake(true)
+			c.JoinRoom(m.DefaultRoom)
+		}
 
+		c.SetName(p.Val)
+		p.SendUserlist(c, m.DefaultRoom)
+		p.SendStatuscode(c, "I:100 | OK", 100, nil, c.GetUserObject())
+	case "link":
+		if !c.NameSet {
+			p.SendStatuscode(c, "E:111 | ID required", 111, nil, nil)
+			return
+		}
+	case "unlink":
+		if !c.NameSet {
+			p.SendStatuscode(c, "E:111 | ID required", 111, nil, nil)
+			return
+		}
+	case "direct":
+		if p.Recipient != "" && !c.NameSet {
+			p.SendStatuscode(c, "E:111 | ID required", 111, nil, nil)
+			return
+		}
+	case "echo":
+		c.writer <- p
 	default:
-		// Handle unknown commands
-		UnicastMessage(client, Packet_UPL{
-			Cmd:    "statuscode",
-			Code:   "E:109 | Invalid command",
-			CodeID: 109,
-			// Val:      client.GenerateUserObject(),
-			Listener: message.Listener,
-		}.ToBytes())
+		log.Println("Unknown CL Method")
+	}
+}
+
+func (p *CL3or4Packet) SendHandshake(c *Client, m *Manager) {
+
+	// Report IP address back to client
+	ip_resp := &CL3or4Packet{
+		Command: "client_ip",
+		Val:     c.conn.RemoteAddr().String(),
+	}
+	c.writer <- ip_resp
+
+	// Send server version
+	if c.dialect <= Dialect_CL3_0_1_7 {
+
+		// CL3 expects the version within a "direct" command
+		c.writer <- &CL3or4Packet{
+			Command: "direct",
+			Val: map[string]any{
+				"cmd": "vers",
+				"val": c.SpoofServerVersion(),
+			},
+		}
+
+	} else {
+
+		// CL4 expects a simple top-level command
+		c.writer <- &CL3or4Packet{
+			Command: "server_version",
+			Val:     c.SpoofServerVersion(),
+		}
+	}
+
+	// Send MOTD
+	c.writer <- &CL3or4Packet{
+		Command: "motd",
+		Val:     m.ServerVersion,
+	}
+
+	// Send client object (Only for latest CL4 clients)
+	if c.dialect >= Dialect_CL4_0_2_0 {
+		c.writer <- &CL3or4Packet{
+			Command: "client_obj",
+			Val:     c.GetUserObject(),
+		}
+	}
+
+	// Send initial state for all subscribed rooms
+	for _, room := range c.Rooms {
+
+		// Send gmsg state
+		c.writer <- &CL3or4Packet{
+			Command: "gmsg",
+			Val:     room.GmsgState,
+			Rooms:   room.Name,
+		}
+
+		// Send userlist state (dialect-specific)
+		p.SendUserlist(c, room)
+
+		// Send gvar state
+		for name, value := range room.GvarStates {
+			c.writer <- &CL3or4Packet{
+				Command: "gvar",
+				Name:    name,
+				Val:     value,
+				Rooms:   room.Name,
+			}
+		}
+	}
+}
+
+func (p *CL3or4Packet) SendUserlist(c *Client, room *Room) {
+	if c.dialect < Dialect_CL4_0_1_8 {
+
+		// Very old clients expect a semicolon-separated string of usernames
+		c.writer <- &CL3or4Packet{
+			Command: "ulist",
+			Val:     room.GenerateUsernameString(),
+		}
+
+	} else {
+
+		if c.dialect == Dialect_CL4_0_2_0 {
+
+			// Latest clients expect an array of user objects and a "set" mode
+			c.writer <- &CL3or4Packet{
+				Command: "ulist",
+				Mode:    "set",
+				Val:     room.GenerateUserObjectList(),
+				Rooms:   room.Name,
+			}
+
+		} else {
+
+			// Older clients expect an array of username strings
+			c.writer <- &CL3or4Packet{
+				Command: "ulist",
+				Val:     room.GenerateUsernameSlice(),
+				Rooms:   room.Name,
+			}
+		}
+	}
+}
+
+func (p *CL3or4Packet) SendStatuscode(c *Client, code string, codeID int, details any, val any) {
+
+	// Early CL3 dialects do not support status codes, so we don't send anything.
+	if c.dialect < Dialect_CL3_0_1_7 {
+		return
+	}
+
+	c.writer <- &CL3or4Packet{
+		Command:  "statuscode",
+		Code:     code,
+		CodeID:   codeID,
+		Details:  details,
+		Val:      val,
+		Listener: p.Listener,
 	}
 }

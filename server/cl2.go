@@ -8,55 +8,102 @@ import (
 	"github.com/goccy/go-json"
 )
 
-// CL2PacketFormatter holds the parsing logic.
-type CL2PacketFormatter struct {
-	parsers map[string]*regexp.Regexp
-}
+var cl2_parsers map[string]*regexp.Regexp
 
-// NewCL2PacketFormatter creates and initializes a new packet formatter with compiled regex.
-func NewCL2PacketFormatter() *CL2PacketFormatter {
-	parsers := make(map[string]*regexp.Regexp)
+func init() {
+	cl2_parsers = make(map[string]*regexp.Regexp)
+
 	// Using named capture groups to easily extract parameters
-	parsers["set_username"] = regexp.MustCompile(`^<%sn>\n(?P<Sender>.*)$`)
-	parsers["disconnect"] = regexp.MustCompile(`^<%ds>\n(?P<Sender>.*)$`)
-	parsers["simple_cmd"] = regexp.MustCompile(`^<%(rf|sh|rt)>\n?(?P<Sender>.*)$`)
-	parsers["global_stream"] = regexp.MustCompile(`^<%gs>\n(?P<Sender>.*?)\n(?s)(?P<Data>.*)$`)
-	parsers["private_stream"] = regexp.MustCompile(`^<%ps>\n(?P<Sender>.*?)\n(?P<Recipient>.*?)\n(?s)(?P<Data>.*)$`)
-	parsers["linked_data"] = regexp.MustCompile(`^<%(l_g|l_p)>\n(?P<Mode>0)\n(?P<Sender>.*?)\n(?P<Recipient>.*?)\n(?s)(?P<Data>.*)$`)
-	parsers["linked_vars"] = regexp.MustCompile(`^<%(l_g|l_p)>\n(?P<Mode>[1-2])\n(?P<Sender>.*?)\n(?P<RecipientVar>.*?)\n(?P<DataVar>.*?)\n(?s)(?P<Data>.*)$`)
-
-	return &CL2PacketFormatter{parsers: parsers}
+	cl2_parsers["set_username"] = regexp.MustCompile(`^<%sn>\n(?P<Sender>.*)$`)
+	cl2_parsers["disconnect"] = regexp.MustCompile(`^<%ds>\n(?P<Sender>.*)$`)
+	cl2_parsers["simple_cmd"] = regexp.MustCompile(`^<%(rf|sh|rt)>\n?(?P<Sender>.*)$`)
+	cl2_parsers["global_stream"] = regexp.MustCompile(`^<%gs>\n(?P<Sender>.*?)\n(?s)(?P<Data>.*)$`)
+	cl2_parsers["private_stream"] = regexp.MustCompile(`^<%ps>\n(?P<Sender>.*?)\n(?P<Recipient>.*?)\n(?s)(?P<Data>.*)$`)
+	cl2_parsers["linked_data"] = regexp.MustCompile(`^<%(l_g|l_p)>\n(?P<Mode>0)\n(?P<Sender>.*?)\n(?P<Recipient>.*?)\n(?s)(?P<Data>.*)$`)
+	cl2_parsers["linked_vars"] = regexp.MustCompile(`^<%(l_g|l_p)>\n(?P<Mode>[1-2])\n(?P<Sender>.*?)\n(?P<RecipientVar>.*?)\n(?P<DataVar>.*?)\n(?s)(?P<Data>.*)$`)
 }
 
-// Parse takes a raw message string and returns a structured PacketCL2.
-func (h *CL2PacketFormatter) Parse(message string) (*Packet_CL2_RxPacket, bool) {
-	for key, re := range h.parsers {
+// This structure is an abstract representation of a CL2 packet.
+type CL2Packet struct {
+	Command   string `json:"cmd,omitempty"`
+	Mode      string `json:"mode,omitempty"`
+	Sender    string `json:"sender,omitempty"`
+	Recipient string `json:"recipient,omitempty"`
+	Var       string `json:"var,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Data      any    `json:"data,omitempty"`
+	ID        string `json:"id,omitempty"`
+}
+
+type CL2Packet_TxReply struct {
+	Type string           `json:"type"`
+	Data CL2Packet_TxData `json:"data"`
+	ID   string           `json:"id,omitempty"`
+}
+
+type CL2Packet_TxData struct {
+	Type string `json:"type,omitempty"`
+	Mode string `json:"mode,omitempty"`
+	Var  string `json:"var,omitempty"`
+	Data string `json:"data"`
+}
+
+func (c *CL2Packet) Bytes() []byte {
+	b, err := json.Marshal(c)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	return b
+}
+
+func (c *CL2Packet) String() string {
+	// stub
+	return string(c.Bytes())
+}
+
+func (c *CL2Packet) DeriveProtocol() uint {
+	return Protocol_CL2
+}
+
+func (c *CL2Packet) DeriveDialect(_ *Client) uint {
+	return Dialect_Undefined
+}
+
+func (c *CL2Packet) IsJSON() bool {
+	return false
+}
+
+// Takes a raw byte array and returns true if it is a semistructured CL2 packet.
+// Also populates the provided packet struct with the extracted parameters.
+func (h *CL2Packet) Reader(raw []byte) bool {
+	message := string(raw)
+	for key, re := range cl2_parsers {
 		if re.MatchString(message) {
 			matches := re.FindStringSubmatch(message)
 			names := re.SubexpNames()
-			packet := &Packet_CL2_RxPacket{} // Renamed Packet to PacketCL2
 
 			// Populate packet struct from named capture groups
 			for i, name := range names {
 				if i > 0 && i < len(matches) {
 					switch name {
 					case "Sender":
-						packet.Sender = matches[i]
+						h.Sender = matches[i]
 					case "Recipient":
-						packet.Recipient = matches[i]
+						h.Recipient = matches[i]
 					case "Data":
-						packet.Data = matches[i]
+						h.Data = matches[i]
 					case "Mode":
-						packet.Mode = matches[i]
+						h.Mode = matches[i]
 					case "RecipientVar":
-						if packet.Mode == "1" {
-							packet.Recipient = matches[i]
+						if h.Mode == "1" {
+							h.Recipient = matches[i]
 						} else {
-							packet.VarName = matches[i]
+							h.Var = matches[i]
 						}
 					case "DataVar":
-						if packet.Mode == "1" {
-							packet.VarName = matches[i]
+						if h.Mode == "1" {
+							h.Var = matches[i]
 						}
 					}
 				}
@@ -64,143 +111,43 @@ func (h *CL2PacketFormatter) Parse(message string) (*Packet_CL2_RxPacket, bool) 
 
 			// Extract the command
 			if key == "simple_cmd" || key == "linked_data" || key == "linked_vars" {
-				packet.Command = re.FindStringSubmatch(message)[1]
+				h.Command = re.FindStringSubmatch(message)[1]
 			} else {
-				packet.Command = strings.Split(key, "_")[0]
+				h.Command = strings.Split(key, "_")[0]
 			}
-
-			return packet, true
+			return true
 		}
 	}
-	return nil, false // No match found
+	return false // No match found
 }
 
-// BuildGlobalResponse creates a JSON packet for a global stream update.
-func BuildGlobalResponse(data string, isSpecialClient bool) ([]byte, error) {
-	if isSpecialClient {
-		resp := Packet_CL2_TxReply{
-			Type: "sf",
-			Data: Packet_CL2_TxData{Type: "gs", Data: data},
+func (p *CL2Packet) Handler(c *Client, m *Manager) {
+	switch p.Command {
+	case "sh":
+		if c.Handshake {
+			return
 		}
-		return json.Marshal(resp)
+		c.JoinRoom(m.DefaultRoom)
+		p.SendHandshake(c, m)
+		c.UpdateHandshake(true)
+	case "rf":
+	case "set":
+		c.SetName(p.Sender)
+	case "global":
+	case "private":
+	case "disconnect":
+	default:
+		log.Println("Unknown CL2 Method")
 	}
-	resp := Packet_CL2_TxSimple{Type: "gs", Data: data}
-	return json.Marshal(resp)
 }
 
-// BuildPrivateResponse creates a JSON packet for a private stream update.
-func BuildPrivateResponse(data, recipient string, isSpecialClient bool) ([]byte, error) {
-	if isSpecialClient {
-		resp := Packet_CL2_TxReply{
-			Type: "sf",
-			ID:   recipient,
-			Data: Packet_CL2_TxData{Type: "ps", Data: data},
-		}
-		return json.Marshal(resp)
-	}
-	resp := Packet_CL2_TxSimple{Type: "ps", Data: data, ID: recipient}
-	return json.Marshal(resp)
-}
-
-// BuildUserListResponse creates a JSON packet for a user list update.
-func BuildUserListResponse(users []string) ([]byte, error) {
-	resp := Packet_CL2_TxSimple{
-		Type: "ul",
-		Data: strings.Join(users, ";") + ";",
-	}
-	return json.Marshal(resp)
-}
-
-// BuildVariableResponse creates a JSON packet for a named variable update.
-func BuildVariableResponse(mode, recipient, varName, data string) ([]byte, error) {
-	resp := Packet_CL2_TxReply{
-		Type: "sf",
-		ID:   recipient,
-		Data: Packet_CL2_TxData{
-			Type: "vm",
-			Mode: mode, // "g" or "p"
-			Var:  varName,
-			Data: data,
-		},
-	}
-	return json.Marshal(resp)
-}
-
-func BuildHandshakeResponse(serverVersion string) ([]byte, error) {
-	resp := Packet_CL2_TxReply{
+func (p *CL2Packet) SendHandshake(c *Client, m *Manager) {
+	resp := &CL2Packet{
 		Type: "direct",
-		Data: Packet_CL2_TxData{
+		Data: &CL2Packet_TxData{
 			Type: "vers",
-			Data: serverVersion,
+			Data: m.ServerVersion,
 		},
 	}
-	return json.Marshal(resp)
-}
-
-// CL2HandleMessage handles incoming messages from clients using the CL2 protocol.
-func CL2HandleMessage(client *Client, msg string) {
-	handler := NewCL2PacketFormatter()
-	manager := client.manager
-	defaultRoom := client.rooms["default"]
-
-	if defaultRoom == nil {
-		panic("Default room not found")
-	}
-
-	if packet, ok := handler.Parse(msg); ok {
-		switch packet.Command {
-
-		case "sh":
-			// Special Feature Handshake
-			client.handshake = true
-
-			response, _ := BuildHandshakeResponse(ServerVersion)
-			UnicastMessage(client, response)
-
-		case "set":
-			// Update the client object with the username
-			client.username = packet.Sender
-
-			log.Println("New username:", client.username)
-
-			// Announce the new user list to the default room
-			allUsers := getAllUsernamesInRoom(defaultRoom)
-			response, _ := BuildUserListResponse(allUsers)
-			MulticastMessage(defaultRoom.clients, response)
-
-		case "gs":
-			// Update the global message state within the room
-			defaultRoom.gmsgState = packet.Data
-
-			// Get client groups from the default room
-			specialClients, standardClients := getClientGroupsByHandshake(defaultRoom)
-
-			// Build and multicast to special-feature clients
-			if len(specialClients) > 0 {
-				specialResponse, _ := BuildGlobalResponse(packet.Data, true)
-				MulticastMessage(specialClients, specialResponse)
-			}
-
-			// Build and multicast to standard clients
-			if len(standardClients) > 0 {
-				standardResponse, _ := BuildGlobalResponse(packet.Data, false)
-				MulticastMessage(standardClients, standardResponse)
-			}
-
-		case "ps":
-			// Find the target client within the entire manager
-			if targetClient, found := findClientByUsername(manager, packet.Recipient); found {
-				// Build response based on the TARGET's handshake status and unicast
-				response, _ := BuildPrivateResponse(packet.Data, packet.Recipient, targetClient.handshake)
-				UnicastMessage(targetClient, response)
-			}
-
-		default:
-			log.Printf("Unknown CL2 command: %s", packet.Command)
-
-		}
-
-	} else {
-		panic("Failed to parse CL2 packet")
-	}
+	c.writer <- resp.Bytes()
 }
