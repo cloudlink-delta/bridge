@@ -2,7 +2,6 @@ module github.com/cloudlink-delta/bridge
 
 go 1.25.2
 
-go 1.25.1
 
 require (
 	github.com/bwmarrin/snowflake v0.3.0

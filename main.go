@@ -43,6 +43,11 @@ func main() {
 		client.Runner()
 	}))
 
+	// Configure instance rebindings
+	instance.Remap("G_MSG", func(peer *duplex.Peer, packet *duplex.RxPacket) {
+		// TODO: implement
+	})
+
 	// Init waitgroup
 	var wg sync.WaitGroup
 	wg.Add(2) // Add 2 waitgroup tasks
