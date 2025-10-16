@@ -15,6 +15,8 @@ import (
 )
 
 func main() {
+
+	// Define a globally unique designation that will be used to identify this bridge server.
 	const DESIGNATION = "bridge@US-NKY-1"
 
 	// Create instance and bridge manager
