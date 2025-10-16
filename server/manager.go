@@ -19,7 +19,7 @@ type Manager struct {
 	VeryVerbose   bool
 }
 
-func NewManager() *Manager {
+func New() *Manager {
 
 	// Initialize snowflake node
 	node, err := snowflake.NewNode(1)
