@@ -14,6 +14,8 @@ const (
 
 const (
 	Dialect_Undefined = iota
+	Dialect_CL2_Early
+	Dialect_CL2_Late
 	Dialect_CL3_0_1_5
 	Dialect_CL3_0_1_7
 	Dialect_CL4_0_1_8
@@ -44,6 +46,68 @@ func NewProtocol(protocol uint) Protocol {
 	}
 }
 
+// This interface defines common methods that can be translated between
+// various versions of the CL protocol.
+type CloudLink interface {
+
+	// Sends a message to all specified clients.
+	BroadcastMsg([]*Client, any)
+
+	// Sends a variable to all specified clients.
+	BroadcastVar([]*Client, string, any)
+
+	// Sends a message to a specific client.
+	UnicastMsg(*Client, any)
+
+	// Sends a variable to a specific client.
+	UnicastVar(*Client, string, any)
+}
+
+type Translatable struct {
+	CloudLink
+}
+
+func MulticastMsg(clients []*Client, payload any) {
+	for _, c := range clients {
+		go UnicastMsg(c, payload)
+	}
+}
+
+func MulticastVar(clients []*Client, name string, val any) {
+	for _, c := range clients {
+		go UnicastVar(c, name, val)
+	}
+}
+
+func UnicastMsg(client *Client, payload any) {
+	NewProtocol(client.protocol).(CloudLink).UnicastMsg(client, payload)
+}
+
+func UnicastVar(client *Client, name string, val any) {
+	NewProtocol(client.protocol).(CloudLink).UnicastVar(client, name, val)
+}
+
+// NewTranslatable takes a packet and returns a pointer to a CloudLink object.
+// This object implements the CloudLink interface, which defines methods for
+// sending messages and variables to clients.
+//
+// Supported packet types are:
+//
+//	*CL2Packet: CL2 protocol packet
+//	*CL3or4Packet: CL3 or CL4 protocol packet
+//
+// If the packet type is unknown, it returns nil.
+func NewTranslatable(packet any) CloudLink {
+	switch packet := packet.(type) {
+	case *CL2Packet:
+		return &Translatable{packet}
+	case *CL3or4Packet:
+		return &Translatable{packet}
+	default:
+		return nil
+	}
+}
+
 // Protocol is a generic interface that defines the methods required
 // for parsing, interpreting, and handling packets.
 type Protocol interface {
@@ -69,26 +133,6 @@ type Protocol interface {
 
 	// IsJSON returns a boolean indicating whether the protocol uses JSON.
 	IsJSON() bool
-}
-
-// This interface defines common methods that can be translated between
-// various versions of the CL protocol.
-type CloudLink interface {
-
-	// MulticastGmsg sends a message to all connected clients in a room.
-	MulticastGmsg(string)
-
-	// MulticastGvar sends a variable to all connected clients in a room.
-	MulticastGvar(string, any)
-
-	// UnicastGmsg sends a message to a specific client.
-	UnicastGmsg(*Client, string)
-
-	// UnicastGvar sends a variable to a specific client.
-	UnicastGvar(*Client, string, any)
-
-	// SendHandshake sends a handshake reply to the client.
-	SendHandshake(*Client)
 }
 
 // DetectAndReadProtocol takes a raw byte array and returns a tuple of a boolean indicating whether a valid protocol was detected, and a pointer to a Protocol object representing the detected protocol.

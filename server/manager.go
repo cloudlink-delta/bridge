@@ -5,11 +5,13 @@ import (
 	"sync"
 
 	"github.com/bwmarrin/snowflake"
+	"github.com/cloudlink-delta/duplex"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/google/uuid"
 )
 
 type Manager struct {
+	instance      *duplex.Instance
 	node          *snowflake.Node
 	connections   map[snowflake.ID]*Client
 	rooms         map[string]*Room
@@ -19,7 +21,7 @@ type Manager struct {
 	VeryVerbose   bool
 }
 
-func New() *Manager {
+func New(instance *duplex.Instance) *Manager {
 
 	// Initialize snowflake node
 	node, err := snowflake.NewNode(1)
@@ -29,6 +31,7 @@ func New() *Manager {
 
 	// Initialize manager
 	manager := &Manager{
+		instance:      instance,
 		node:          node,
 		connections:   make(map[snowflake.ID]*Client),
 		rooms:         make(map[string]*Room),

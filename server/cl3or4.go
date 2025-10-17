@@ -251,7 +251,7 @@ func (p *CL3or4Packet) SendUserlist(c *Client, room *Room) {
 		// Very old clients expect a semicolon-separated string of usernames
 		c.writer <- &CL3or4Packet{
 			Command: "ulist",
-			Val:     room.GenerateUsernameString(),
+			Val:     room.GenerateUserlistString(),
 		}
 
 	} else {
@@ -271,7 +271,7 @@ func (p *CL3or4Packet) SendUserlist(c *Client, room *Room) {
 			// Older clients expect an array of username strings
 			c.writer <- &CL3or4Packet{
 				Command: "ulist",
-				Val:     room.GenerateUsernameSlice(),
+				Val:     room.GenerateUserlistSlice(),
 				Rooms:   room.Name,
 			}
 		}
@@ -292,5 +292,39 @@ func (p *CL3or4Packet) SendStatuscode(c *Client, code string, codeID int, detail
 		Details:  details,
 		Val:      val,
 		Listener: p.Listener,
+	}
+}
+
+func (p *CL3or4Packet) BroadcastMsg(clients []*Client, val any) {
+	for _, c := range clients {
+		c.writer <- &CL3or4Packet{
+			Command: "gmsg",
+			Val:     val,
+		}
+	}
+}
+
+func (p *CL3or4Packet) BroadcastVar(clients []*Client, name string, val any) {
+	for _, c := range clients {
+		c.writer <- &CL3or4Packet{
+			Command: "gvar",
+			Name:    name,
+			Val:     val,
+		}
+	}
+}
+
+func (p *CL3or4Packet) UnicastMsg(c *Client, val any) {
+	c.writer <- &CL3or4Packet{
+		Command: "pmsg",
+		Val:     val,
+	}
+}
+
+func (p *CL3or4Packet) UnicastVar(c *Client, name string, val any) {
+	c.writer <- &CL3or4Packet{
+		Command: "pvar",
+		Name:    name,
+		Val:     val,
 	}
 }

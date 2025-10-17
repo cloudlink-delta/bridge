@@ -102,6 +102,16 @@ func (c *Client) LeaveRoom(r *Room) {
 	}
 }
 
+func (r *Room) ClientsAsSlice() []*Client {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	var clients []*Client
+	for _, client := range r.Clients {
+		clients = append(clients, client)
+	}
+	return clients
+}
+
 func (r *Room) SetGvar(name any, value any) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -126,11 +136,10 @@ func (r *Room) GetAllGvars() map[any]any {
 	return r.GvarStates
 }
 
-func (r *Room) GenerateUsernameString() string {
+func (r *Room) GenerateUserlistString() string {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	var sb strings.Builder
-	log.Println(r.Clients)
 	for _, s := range r.Clients {
 		e, err := json.Marshal(s.Name)
 		if err != nil {
@@ -143,7 +152,7 @@ func (r *Room) GenerateUsernameString() string {
 	return sb.String()
 }
 
-func (r *Room) GenerateUsernameSlice() any {
+func (r *Room) GenerateUserlistSlice() any {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	var usernames []string
@@ -178,4 +187,28 @@ func (r *Room) GenerateUserObjectList() any {
 		return "[]"
 	}
 	return users
+}
+
+func (r *Room) GetHandshakedClients() []*Client {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	var clients []*Client
+	for _, client := range r.Clients {
+		if !client.Handshake {
+			continue
+		}
+		clients = append(clients, client)
+	}
+	return clients
+}
+
+func (r *Room) FindClientByUsername(username string) (target *Client, found bool) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	for _, client := range r.Clients {
+		if client.Name == username {
+			return client, true
+		}
+	}
+	return nil, false
 }

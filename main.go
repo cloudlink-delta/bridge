@@ -26,7 +26,7 @@ func main() {
 		JSONEncoder: json.Marshal,
 		JSONDecoder: json.Unmarshal,
 	})
-	manager := bridge.New()
+	manager := bridge.New(instance)
 
 	// Configure bridge websocket
 	app.Use("/*", func(c *fiber.Ctx) error {
@@ -42,11 +42,6 @@ func main() {
 		defer manager.Destroy(client)
 		client.Runner()
 	}))
-
-	// Configure instance rebindings
-	instance.Remap("G_MSG", func(peer *duplex.Peer, packet *duplex.RxPacket) {
-		// TODO: implement
-	})
 
 	// Init waitgroup
 	var wg sync.WaitGroup
