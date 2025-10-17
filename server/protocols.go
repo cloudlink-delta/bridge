@@ -54,13 +54,13 @@ type CloudLink interface {
 	BroadcastMsg([]*Client, any)
 
 	// Sends a variable to all specified clients.
-	BroadcastVar([]*Client, string, any)
+	BroadcastVar([]*Client, any, any)
 
 	// Sends a message to a specific client.
 	UnicastMsg(*Client, any)
 
 	// Sends a variable to a specific client.
-	UnicastVar(*Client, string, any)
+	UnicastVar(*Client, any, any)
 }
 
 type Translatable struct {
@@ -73,7 +73,7 @@ func MulticastMsg(clients []*Client, payload any) {
 	}
 }
 
-func MulticastVar(clients []*Client, name string, val any) {
+func MulticastVar(clients []*Client, name any, val any) {
 	for _, c := range clients {
 		go UnicastVar(c, name, val)
 	}
@@ -83,7 +83,7 @@ func UnicastMsg(client *Client, payload any) {
 	NewProtocol(client.protocol).(CloudLink).UnicastMsg(client, payload)
 }
 
-func UnicastVar(client *Client, name string, val any) {
+func UnicastVar(client *Client, name any, val any) {
 	NewProtocol(client.protocol).(CloudLink).UnicastVar(client, name, val)
 }
 

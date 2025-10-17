@@ -9,14 +9,13 @@ import (
 	"github.com/goccy/go-json"
 )
 
-func (c *Client) AllRooms() []*Room {
-	c.roomlock.Lock()
-	defer c.roomlock.Unlock()
-	var room_map []*Room
-	for _, room := range c.Rooms {
-		room_map = append(room_map, room)
-	}
-	return room_map
+type Room struct {
+	Name       string
+	GmsgState  any
+	GvarStates map[any]any
+	Clients    map[snowflake.ID]*Client
+	manager    *Manager
+	lock       *sync.Mutex
 }
 
 func (m *Manager) AllRooms() []*Room {
@@ -70,43 +69,16 @@ func (m *Manager) GetRoom(name string) *Room {
 	return nil
 }
 
-func (c *Client) JoinRoom(r *Room) {
-	r.lock.Lock()
-	r.Clients[c.ID] = c
-	r.lock.Unlock()
-
-	c.roomlock.Lock()
-	c.Rooms[r.Name] = r
-	c.roomlock.Unlock()
-
-	log.Printf("%s joined room %s", c.GiveName(), r.Name)
-}
-
-func (c *Client) LeaveRoom(r *Room) {
-	m := c.manager
-
-	r.lock.Lock()
-	delete(r.Clients, c.ID)
-	r.lock.Unlock()
-
-	c.roomlock.Lock()
-	delete(c.Rooms, r.Name)
-	c.roomlock.Unlock()
-
-	log.Printf("%s left room %s", c.GiveName(), r.Name)
-
-	// Destroy room if empty but never the default one
-	if r != m.DefaultRoom && len(r.Clients) == 0 {
-		log.Println("Destroying room", r.Name, "because it has been deserted")
-		m.DestroyRoom(r)
-	}
-}
-
-func (r *Room) ClientsAsSlice() []*Client {
+func (r *Room) ClientsAsSlice(exclusions ...*Client) []*Client {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	var clients []*Client
 	for _, client := range r.Clients {
+		for _, exclusion := range exclusions {
+			if client == exclusion {
+				continue
+			}
+		}
 		clients = append(clients, client)
 	}
 	return clients

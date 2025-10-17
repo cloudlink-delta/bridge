@@ -129,3 +129,24 @@ func (c *Client) Handler(packet any) {
 		panic("unhandled protocol")
 	}
 }
+
+func (c *Client) getTargetRooms(roomSpec any) []*Room {
+	targetRooms := []*Room{}
+	switch specifiedRooms := roomSpec.(type) {
+	case nil: // Broadcast to all subscribed rooms
+		for _, room := range c.Rooms {
+			targetRooms = append(targetRooms, room)
+		}
+	case []any: // Broadcast to specific subscribed rooms
+		for _, roomName := range specifiedRooms {
+			if room, ok := c.Rooms[roomName]; ok {
+				targetRooms = append(targetRooms, room)
+			}
+		}
+	case any: // Broadcast to a single specified room
+		if room, ok := c.Rooms[specifiedRooms]; ok {
+			targetRooms = append(targetRooms, room)
+		}
+	}
+	return targetRooms
+}

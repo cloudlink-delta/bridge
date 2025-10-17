@@ -1,6 +1,7 @@
 package cloudlink
 
 import (
+	"fmt"
 	"log"
 	"sync"
 
@@ -19,6 +20,13 @@ type Manager struct {
 	DefaultRoom   *Room
 	ServerVersion string
 	VeryVerbose   bool
+	Config        *Config
+}
+
+type Config struct {
+	EnableMOTD       bool
+	MOTDMessage      string
+	ServeIPAddresses bool
 }
 
 func New(instance *duplex.Instance) *Manager {
@@ -38,6 +46,11 @@ func New(instance *duplex.Instance) *Manager {
 		lock:          &sync.Mutex{},
 		ServerVersion: "1.2.0",
 		VeryVerbose:   true,
+		Config: &Config{
+			EnableMOTD:       false,
+			MOTDMessage:      "",
+			ServeIPAddresses: false,
+		},
 	}
 
 	// Create default room
@@ -50,7 +63,7 @@ func (m *Manager) Create(conn *websocket.Conn) *Client {
 	c := &Client{
 		ID:       m.node.Generate(),
 		UUID:     uuid.New(),
-		Rooms:    make(map[string]*Room),
+		Rooms:    make(map[any]*Room),
 		protocol: Protocol_Undefined,
 		dialect:  Dialect_Undefined,
 		conn:     conn,
@@ -104,4 +117,45 @@ func (m *Manager) Multicast(clients map[snowflake.ID]*Client, packet any, exclus
 	for _, client := range clients {
 		go m.Unicast(client, packet)
 	}
+}
+
+func (m *Manager) IsUsernameTaken(name string, excludeID snowflake.ID) bool {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	for id, client := range m.connections {
+		if id != excludeID && client.NameSet && client.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) FindClient(id any) (*Client, bool) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	// Try finding by snowflake ID first
+	if sfID, ok := id.(snowflake.ID); ok {
+		client, found := m.connections[sfID]
+		return client, found
+	}
+
+	// Try finding by username
+	idStr := fmt.Sprintf("%v", id) // Convert id to string for comparison
+	for _, client := range m.connections {
+		if client.NameSet && fmt.Sprintf("%v", client.Name) == idStr {
+			return client, true
+		}
+	}
+
+	// Try finding by UUID
+	if uuidVal, err := uuid.Parse(idStr); err == nil {
+		for _, client := range m.connections {
+			if client.UUID == uuidVal {
+				return client, true
+			}
+		}
+	}
+
+	return nil, false
 }

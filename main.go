@@ -28,6 +28,11 @@ func main() {
 	})
 	manager := bridge.New(instance)
 
+	// Configure manager settings
+	manager.Config.EnableMOTD = true
+	manager.Config.MOTDMessage = "CloudLink Bridge Server - Use bridge@US-NKY-1 to connect on CloudLink Delta!"
+	manager.Config.ServeIPAddresses = true
+
 	// Configure bridge websocket
 	app.Use("/*", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {

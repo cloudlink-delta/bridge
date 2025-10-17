@@ -68,7 +68,7 @@ type CL2Packet struct {
 	Mode      string  `json:"mode,omitempty"`
 	Sender    string  `json:"sender,omitempty"` // Parsed from packet
 	Recipient string  `json:"recipient,omitempty"`
-	Var       string  `json:"var,omitempty"`  // For variable commands
+	Var       any     `json:"var,omitempty"`  // For variable commands
 	Type      string  `json:"type,omitempty"` // For JSON response building
 	Data      any     `json:"data,omitempty"` // Parsed data or data for JSON response
 	ID        string  `json:"id,omitempty"`   // For private JSON responses
@@ -86,7 +86,7 @@ type CL2Packet_TxReply struct {
 type CL2Packet_TxData struct {
 	Type string `json:"type,omitempty"` // e.g., "gs", "ps", "vm", "vers"
 	Mode string `json:"mode,omitempty"` // "g" or "p" for "vm" type
-	Var  string `json:"var,omitempty"`  // Variable name for "vm" type
+	Var  any    `json:"var,omitempty"`  // Variable name for "vm" type
 	Data any    `json:"data"`           // Actual payload
 }
 
@@ -144,6 +144,12 @@ func (p *CL2Packet) IsJSON() bool {
 // Also populates the provided packet struct with the extracted parameters.
 func (h *CL2Packet) Reader(raw []byte) bool {
 	message := string(raw)
+
+	// Don't bother to parse the packet if the first two chars isn't "<%"
+	if !strings.HasPrefix(message, "<%") {
+		return false
+	}
+
 	for _, parser := range orderedCL2Parsers {
 		if parser.re.MatchString(message) {
 			matches := parser.re.FindStringSubmatch(message)
@@ -323,10 +329,11 @@ func (p *CL2Packet) SendHandshake(c *Client, m *Manager) {
 
 // BroadcastMsg sends a global message ('gs' type) to a list of clients.
 func (p *CL2Packet) BroadcastMsg(clients []*Client, val any) {
+	// Origin is not typically needed for CL2 global broadcasts from the server
 	for _, client := range clients {
 		if client.protocol != Protocol_CL2 {
 			continue
-		} // Ensure it's a CL2 client
+		}
 
 		var respData any
 		respType := "gs"
@@ -335,9 +342,9 @@ func (p *CL2Packet) BroadcastMsg(clients []*Client, val any) {
 			respType = "sf"
 			respData = &CL2Packet_TxData{
 				Type: "gs",
-				Data: val,
+				Data: val, // Use the provided value directly
 			}
-		} else { // Standard response for non-handshaked clients
+		} else { // Standard response
 			respData = val
 		}
 
@@ -350,19 +357,20 @@ func (p *CL2Packet) BroadcastMsg(clients []*Client, val any) {
 }
 
 // BroadcastVar sends a global variable update ('vm', mode 'g') to handshaked clients.
-func (p *CL2Packet) BroadcastVar(clients []*Client, name string, val any) {
+func (p *CL2Packet) BroadcastVar(clients []*Client, name any, val any) {
+	// Origin is not typically needed for CL2 global broadcasts from the server
 	for _, client := range clients {
 		if client.protocol != Protocol_CL2 || !client.Handshake {
 			continue
-		} // Only send to handshaked CL2 clients
+		}
 
 		resp := &CL2Packet{
-			Type: "sf", // Variable updates require handshake, always wrapped in "sf"
+			Type: "sf",
 			Data: &CL2Packet_TxData{
 				Type: "vm",
-				Mode: "g", // Global variable
+				Mode: "g",
 				Var:  name,
-				Data: val,
+				Data: val, // Use the provided value directly
 			},
 		}
 		client.writer <- resp.Bytes()
@@ -370,10 +378,17 @@ func (p *CL2Packet) BroadcastVar(clients []*Client, name string, val any) {
 }
 
 // UnicastMsg sends a private message ('ps' type) to a specific client.
+// Origin is derived from the packet's origin field.
 func (p *CL2Packet) UnicastMsg(c *Client, val any) {
 	if c.protocol != Protocol_CL2 {
 		return
-	} // Ensure target is CL2
+	}
+
+	// Check if origin client exists on the packet
+	if p.origin == nil {
+		log.Println("Error sending CL2 UnicastMsg: Origin client is nil")
+		return
+	}
 
 	var respData any
 	respType := "ps"
@@ -382,37 +397,44 @@ func (p *CL2Packet) UnicastMsg(c *Client, val any) {
 		respType = "sf"
 		respData = &CL2Packet_TxData{
 			Type: "ps",
-			Data: val,
+			Data: val, // Use the provided value directly
 		}
-	} else { // Standard response for non-handshaked clients
+	} else { // Standard response
 		respData = val
 	}
 
 	resp := &CL2Packet{
-		Type:   respType,
-		Data:   respData,
-		ID:     c.ID.String(),        // Server sends message addressed to the recipient
-		Sender: p.origin.ID.String(), // "sender" is implicit in CL2 server->client
+		Type: respType,
+		Data: respData,
+		ID:   c.ID.String(), // Address to the recipient
+		// Sender: p.origin.ID.String(), // CL2 server->client usually doesn't explicitly state sender
 	}
 	c.writer <- resp.Bytes()
 }
 
 // UnicastVar sends a private variable update ('vm', mode 'p') to a specific handshaked client.
-func (p *CL2Packet) UnicastVar(c *Client, name string, val any) {
+// Origin is derived from the packet's origin field.
+func (p *CL2Packet) UnicastVar(c *Client, name any, val any) {
 	if c.protocol != Protocol_CL2 || !c.Handshake {
 		return
-	} // Only send to handshaked CL2 clients
+	}
+
+	// Check if origin client exists on the packet
+	if p.origin == nil {
+		log.Println("Error sending CL2 UnicastVar: Origin client is nil")
+		return
+	}
 
 	resp := &CL2Packet{
-		Type: "sf",          // Variable updates require handshake, always wrapped in "sf"
+		Type: "sf",
 		ID:   c.ID.String(), // Address to the recipient
 		Data: &CL2Packet_TxData{
 			Type: "vm",
-			Mode: "p", // Private variable
+			Mode: "p",
 			Var:  name,
-			Data: val,
+			Data: val, // Use the provided value directly
 		},
-		Sender: p.origin.ID.String(), // "sender" might be needed depending on client implementation
+		// Sender: p.origin.ID.String(), // Optionally add origin if client needs it
 	}
 	c.writer <- resp.Bytes()
 }
