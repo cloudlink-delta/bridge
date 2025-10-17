@@ -116,7 +116,12 @@ func (p *CL2Packet) Bytes() []byte {
 }
 
 func (p *CL2Packet) String() string {
-	return string(p.Bytes())
+	b, err := json.Marshal(p)
+	if err != nil {
+		log.Println("CL2 JSON Marshal Error:", err)
+		return ""
+	}
+	return string(b)
 }
 
 func (p *CL2Packet) DeriveProtocol() uint {
@@ -141,13 +146,9 @@ func (h *CL2Packet) Reader(raw []byte) bool {
 	message := string(raw)
 	for _, parser := range orderedCL2Parsers {
 		if parser.re.MatchString(message) {
-			log.Printf("Matched regex: %s", parser.name)
 			matches := parser.re.FindStringSubmatch(message)
 			names := parser.re.SubexpNames()
 			parserName := parser.name
-
-			log.Printf("Matches: %v", matches)
-			log.Printf("Names: %v", names)
 
 			// Clear the struct pointed to by h right before populating
 			*h = CL2Packet{}
@@ -182,20 +183,16 @@ func (h *CL2Packet) Reader(raw []byte) bool {
 					}
 				}
 			}
-			log.Printf("Captured values: %v", captured)
 
 			// Fallback Command Extraction (if not set by unnamed group)
 			if h.Command == "" {
 				if !(strings.HasPrefix(parserName, "linked_") || parserName == "simple_cmd") {
-					log.Printf("Extracting command using key %s", parserName)
 					h.Command = strings.Split(parserName, "_")[0]
 				} else {
 					// This case should ideally not be reached if regex and logic are correct
 					log.Printf("Error: Command wasn't captured or derived for %s", parserName)
 					// return false // Or handle error appropriately
 				}
-			} else {
-				log.Printf("Extracted command '%s' from matched group for: %s", h.Command, parserName)
 			}
 
 			// Store raw Data string first
@@ -215,7 +212,6 @@ func (h *CL2Packet) Reader(raw []byte) bool {
 			}
 
 			// Populate the packet struct
-			log.Printf("Successfully parsed CL2 packet: %+v", h)
 			return true // Successfully parsed
 		}
 	}
