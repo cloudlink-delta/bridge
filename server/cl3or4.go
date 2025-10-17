@@ -143,7 +143,7 @@ func (p *CL3or4Packet) Handler(c *Client, m *Manager) {
 	}
 
 	switch p.Command {
-	case "handshake":
+	case "handshake", "type": // type is for 0.1.7 dialect (de-nested from direct)
 		if c.Handshake {
 			SendStatuscode(c, "I:100 | OK", 100, "Handshake already complete", nil, p.Listener)
 			return
@@ -662,9 +662,13 @@ func (p *CL3or4Packet) UnicastMsg(target *Client, val any) {
 		Val:     val,
 	}
 
-	if target.dialect >= Dialect_CL4_0_2_0 {
+	switch target.dialect {
+	case Dialect_CL3_0_1_7, Dialect_CL4_0_1_8, Dialect_CL4_0_1_9:
+		packet.Origin = p.origin.Name
+	case Dialect_CL4_0_2_0:
 		packet.Origin = p.origin.GetUserObject()
 	}
+
 	// Rooms generally not needed for unicast responses from server
 
 	target.writer <- packet // Send struct
@@ -690,9 +694,13 @@ func (p *CL3or4Packet) UnicastVar(target *Client, name any, val any) {
 		Val:     val,
 	}
 
-	if target.dialect >= Dialect_CL4_0_2_0 {
+	switch target.dialect {
+	case Dialect_CL3_0_1_7, Dialect_CL4_0_1_8, Dialect_CL4_0_1_9:
+		packet.Origin = p.origin.Name
+	case Dialect_CL4_0_2_0:
 		packet.Origin = p.origin.GetUserObject()
 	}
+
 	// Rooms generally not needed for unicast responses from server
 
 	target.writer <- packet // Send struct
