@@ -1,7 +1,9 @@
-package cloudlink
+package server
 
 import (
+	"fmt"
 	"log"
+	"sync"
 
 	"github.com/gofiber/contrib/websocket"
 )
@@ -46,26 +48,24 @@ reader:
 			switch msg_type {
 			case websocket.TextMessage:
 
-				if c.protocol == Protocol_Undefined {
-					detected, detect_format_packet := DetectAndReadProtocol(packet, c)
-					if !detected {
+				// If this is the very first packet, try to detect the protocol
+				if c.Protocol == nil {
+					var ok bool
+					if ok, c.Protocol = DetectAndReadProtocol(c, packet); !ok {
 						c.writer <- "failed to detect protocol"
 						c.exit <- true
 						break reader
 					}
-					c.protocol = detect_format_packet.DeriveProtocol()
-					c.dialect = detect_format_packet.DeriveDialect(c)
-					c.reader <- detect_format_packet
-					continue
 				}
 
-				known_format_packet := NewProtocol(c.protocol)
-				if !known_format_packet.Reader(packet) {
+				// Otherwise, create a new reader instance and process it
+				p := c.Protocol.New()
+				if !p.Reader(packet) {
 					c.writer <- "failed to parse packet"
 					c.exit <- true
 					break reader
 				}
-				c.reader <- known_format_packet
+				c.reader <- p
 
 			default:
 				panic("unhandled message type")
@@ -81,6 +81,54 @@ reader:
 	}
 }
 
+func DetectAndReadProtocol(c *Client, data []byte) (bool, Protocol) {
+	var wg sync.WaitGroup
+	resultCh := make(chan Protocol, 1) // Buffered channel of size 1
+
+	detectors := []func(){
+		func() {
+			defer wg.Done()
+			if p := NewCL3or4Packet(c); p.Reader(data) {
+				log.Printf("%s 𝐢 CL3 or CL4 protocol detected", c.GiveName())
+				resultCh <- p
+			}
+		},
+		func() {
+			defer wg.Done()
+			if s := NewScratchPacket(c); s.Reader(data) {
+				log.Printf("%s 𝐢 Scratch protocol detected", c.GiveName())
+				resultCh <- s
+			}
+		},
+		func() {
+			defer wg.Done()
+			if l := NewCL2Packet(c); l.Reader(data) {
+				log.Printf("%s 𝐢 CL2 protocol detected", c.GiveName())
+				resultCh <- l
+			}
+		},
+	}
+
+	wg.Add(len(detectors))
+	for _, detector := range detectors {
+		go detector()
+	}
+
+	// Goroutine to wait for all detectors and close the channel
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	if p, ok := <-resultCh; ok {
+		return true, p
+	}
+
+	// No valid protocol detected
+	log.Println("No valid protocol detected")
+	return false, nil
+}
+
 func (c *Client) Writer(packet any) {
 	c.tx.Lock()
 	defer c.tx.Unlock()
@@ -89,7 +137,7 @@ func (c *Client) Writer(packet any) {
 		case Protocol:
 
 			if c.manager.VeryVerbose {
-				log.Printf("%s 🢀 %v", c.GiveName(), transmit.String())
+				log.Printf("%s 🢀  %v", c.GiveName(), transmit.String())
 			}
 
 			if transmit.IsJSON() {
@@ -101,14 +149,14 @@ func (c *Client) Writer(packet any) {
 		case string:
 
 			if c.manager.VeryVerbose {
-				log.Printf("%s 🢀 %v", c.GiveName(), transmit)
+				log.Printf("%s 🢀  %v", c.GiveName(), transmit)
 			}
 
 			c.conn.WriteMessage(websocket.TextMessage, []byte(transmit))
 		case []byte:
 
 			if c.manager.VeryVerbose {
-				log.Printf("%s 🢀 %v", c.GiveName(), string(transmit))
+				log.Printf("%s 🢀  %v", c.GiveName(), string(transmit))
 			}
 
 			c.conn.WriteMessage(websocket.TextMessage, transmit)
@@ -122,7 +170,7 @@ func (c *Client) Handler(packet any) {
 	switch packet := packet.(type) {
 	case Protocol:
 		if c.manager.VeryVerbose {
-			log.Printf("%s 🢂 %v", c.GiveName(), packet)
+			log.Printf("%s 🢂  %v", c.GiveName(), packet)
 		}
 		packet.Handler(c, c.manager)
 	default:
@@ -130,23 +178,35 @@ func (c *Client) Handler(packet any) {
 	}
 }
 
-func (c *Client) getTargetRooms(roomSpec any) []*Room {
-	targetRooms := []*Room{}
-	switch specifiedRooms := roomSpec.(type) {
-	case nil: // Broadcast to all subscribed rooms
-		for _, room := range c.Rooms {
-			targetRooms = append(targetRooms, room)
+func (c *Client) GetUserObject() *UserObject {
+	if c.NameSet {
+		return &UserObject{
+			ID:       c.ID,
+			Username: c.Name,
+			UUID:     c.UUID,
 		}
-	case []any: // Broadcast to specific subscribed rooms
-		for _, roomName := range specifiedRooms {
-			if room, ok := c.Rooms[roomName]; ok {
-				targetRooms = append(targetRooms, room)
-			}
-		}
-	case any: // Broadcast to a single specified room
-		if room, ok := c.Rooms[specifiedRooms]; ok {
-			targetRooms = append(targetRooms, room)
+	} else {
+		return &UserObject{
+			ID:   c.ID,
+			UUID: c.UUID,
 		}
 	}
-	return targetRooms
+}
+
+func (c *Client) GiveName() string {
+	if !c.NameSet {
+		return fmt.Sprintf("[%s]", c.ID)
+	} else {
+		return fmt.Sprintf("[%v (%s)]", c.Name, c.ID)
+	}
+}
+
+func (c *Client) SetName(name any) {
+	c.Name = name
+	c.NameSet = true
+	log.Printf("[%s] ▶ [%v (%s)]", c.ID, name, c.ID)
+}
+
+func (c *Client) UpdateHandshake(handshake bool) {
+	c.Handshake = handshake
 }

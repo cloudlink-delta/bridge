@@ -1,22 +1,13 @@
-package cloudlink
+package server
 
 import (
+	"encoding/json"
 	"log"
 	"strings"
 	"sync"
 
 	"github.com/bwmarrin/snowflake"
-	"github.com/goccy/go-json"
 )
-
-type Room struct {
-	Name       string
-	GmsgState  any
-	GvarStates map[any]any
-	Clients    map[snowflake.ID]*Client
-	manager    *Manager
-	lock       *sync.Mutex
-}
 
 func (m *Manager) AllRooms() []*Room {
 	m.lock.Lock()
@@ -183,4 +174,67 @@ func (r *Room) FindClientByUsername(username string) (target *Client, found bool
 		}
 	}
 	return nil, false
+}
+
+func (c *Client) AllRooms() []*Room {
+	c.roomlock.Lock()
+	defer c.roomlock.Unlock()
+	var room_map []*Room
+	for _, room := range c.Rooms {
+		room_map = append(room_map, room)
+	}
+	return room_map
+}
+
+func (c *Client) JoinRoom(r *Room) {
+	r.lock.Lock()
+	r.Clients[c.ID] = c
+	r.lock.Unlock()
+
+	c.roomlock.Lock()
+	c.Rooms[r.Name] = r
+	c.roomlock.Unlock()
+
+	log.Printf("%s joined room %s", c.GiveName(), r.Name)
+}
+
+func (c *Client) LeaveRoom(r *Room) {
+	m := c.manager
+
+	r.lock.Lock()
+	delete(r.Clients, c.ID)
+	r.lock.Unlock()
+
+	c.roomlock.Lock()
+	delete(c.Rooms, r.Name)
+	c.roomlock.Unlock()
+
+	log.Printf("%s left room %s", c.GiveName(), r.Name)
+
+	// Destroy room if empty but never the default one
+	if r != m.DefaultRoom && len(r.Clients) == 0 {
+		log.Println("Destroying room", r.Name, "because it has been deserted")
+		m.DestroyRoom(r)
+	}
+}
+
+func (c *Client) getTargetRooms(roomSpec any) []*Room {
+	targetRooms := []*Room{}
+	switch specifiedRooms := roomSpec.(type) {
+	case nil: // Broadcast to all subscribed rooms
+		for _, room := range c.Rooms {
+			targetRooms = append(targetRooms, room)
+		}
+	case []any: // Broadcast to specific subscribed rooms
+		for _, roomName := range specifiedRooms {
+			if room, ok := c.Rooms[roomName]; ok {
+				targetRooms = append(targetRooms, room)
+			}
+		}
+	case any: // Broadcast to a single specified room
+		if room, ok := c.Rooms[specifiedRooms]; ok {
+			targetRooms = append(targetRooms, room)
+		}
+	}
+	return targetRooms
 }
