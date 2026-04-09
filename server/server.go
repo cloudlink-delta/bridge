@@ -82,23 +82,12 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	instance.OnDiscoveryConnected = func(peer *duplex.Peer) {
 		log.Printf("Discovery services connected as %s", peer.GiveName())
 
-		// Register the bridge as an entry
-		reply := peer.SendAndWaitForReply(&duplex.TxPacket{
-			Packet: duplex.Packet{
-				Opcode:   "REGISTER",
-				Origin:   "bridge@" + designation,
-				Target:   peer.GiveName(),
-				Listener: "init_bridge",
-				TTL:      1,
-			},
-			Payload: "bridge",
-		})
-
+		reply := peer.WaitForMatchedPacket("AUTO_REGISTER", "VIOLATION")
 		switch reply.Opcode {
-		case "REGISTER_ACK":
-			log.Printf("Registered on %s successfully!", peer.GiveName())
+		case "AUTO_REGISTER":
+			log.Printf("Automatically registered on %s successfully!", peer.GiveName())
 		default:
-			log.Printf("Failed to register on %s: %v", peer.GiveName(), reply)
+			log.Printf("Failed to auto-register on %s: %v", peer.GiveName(), reply)
 		}
 	}
 
