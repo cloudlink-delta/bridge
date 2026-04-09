@@ -9,7 +9,9 @@ import (
 )
 
 func main() {
+
 	// Define a globally unique designation that will be used to identify this bridge server.
+// Our peer's ID will become "bridge@[DESIGNATION]".
 	const DESIGNATION = "SOMEWHERE-EARTH"
 
 	instance := server.New(DESIGNATION, &server.Config{
