@@ -10,7 +10,7 @@ import (
 
 func main() {
 	// Define a globally unique designation that will be used to identify this bridge server.
-	const DESIGNATION = "US-NKY-1"
+	const DESIGNATION = "SOMEWHERE-EARTH"
 
 	instance := server.New(DESIGNATION, &server.Config{
 		Enable_MOTD:        true,
