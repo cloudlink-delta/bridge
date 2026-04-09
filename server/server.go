@@ -80,14 +80,19 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	}
 
 	instance.OnDiscoveryConnected = func(peer *duplex.Peer) {
-		log.Printf("Discovery services connected as %s", peer.GiveName())
+		log.Printf("Discovery services connected as %s", peer.GetPeerID())
 
 		reply := peer.WaitForMatchedPacket("AUTO_REGISTER", "VIOLATION")
 		switch reply.Opcode {
 		case "AUTO_REGISTER":
-			log.Printf("Automatically registered on %s successfully!", peer.GiveName())
-		default:
-			log.Printf("Failed to auto-register on %s: %v", peer.GiveName(), reply)
+			log.Printf("Automatically registered on %s successfully!", peer.GetPeerID())
+		case "VIOLATION":
+			// The protocol mandates that VIOLATION messages have a string payload. This should never panic unless something's very wrong.
+			var message string
+			if err := json.Unmarshal(reply.Payload, &message); err != nil {
+				panic(err)
+			}
+			log.Printf("Failed to auto-register on %s: %v", peer.GetPeerID(), message)
 		}
 	}
 
