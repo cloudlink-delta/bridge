@@ -75,11 +75,34 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	// Configure instance callbacks
 	instance.OnCreate = func() {
 		// Attempt to connect to the discovery server
+		log.Printf("Attempting to connect to discovery server (discovery@%s)...", designation)
 		instance.Connect("discovery@" + designation)
 	}
+
+	instance.OnDiscoveryConnected = func(peer *duplex.Peer) {
+		log.Printf("Discovery services connected as %s", peer.GiveName())
+
+		// Register the bridge as an entry
+		reply := peer.SendAndWaitForReply("REGISTER_ACK", &duplex.TxPacket{
+			Packet: duplex.Packet{
+				Opcode:   "REGISTER",
+				Origin:   "bridge@" + designation,
+				Target:   peer.GiveName(),
+				Listener: "init_bridge",
+				TTL:      1,
+			},
+			Payload: "bridge",
+		})
+
+		log.Printf("Got reply %v", reply)
+	}
+
+	// Stubs
 	instance.AfterNegotiation = func(peer *duplex.Peer) {}
 	instance.OnOpen = func(peer *duplex.Peer) {}
 	instance.OnClose = func(peer *duplex.Peer) {}
+	instance.OnBridgeConnected = func(peer *duplex.Peer) {}
+	instance.OnRelayConnected = func(peer *duplex.Peer) {}
 
 	return server
 }
