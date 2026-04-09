@@ -2,135 +2,9 @@ package server
 
 import (
 	"fmt"
-	"log"
-	"strings"
-
-	"github.com/bwmarrin/snowflake"
-	"github.com/goccy/go-json"
-	"github.com/google/uuid"
 )
 
-func (m *Manager) Unicast(client *Client, packet any) {
-	if proto, ok := packet.(Protocol); ok {
-		original := proto.DeriveProtocol()
-		target := client.Protocol.DeriveProtocol()
-		if client.Protocol != nil && original != target {
-
-			// "Converting x to y"
-			log_message := &strings.Builder{}
-			log_message.WriteString(" 𝐢 Converting ")
-			switch original {
-			case Protocol_CL2:
-				log_message.WriteString("CL2")
-			case Protocol_CL3or4:
-				log_message.WriteString("CL3/CL4")
-			case Protocol_Scratch:
-				log_message.WriteString("Scratch")
-			}
-			log_message.WriteString(" to ")
-			switch target {
-			case Protocol_CL2:
-				log_message.WriteString("CL2")
-			case Protocol_CL3or4:
-				log_message.WriteString("CL3/CL4")
-			case Protocol_Scratch:
-				log_message.WriteString("Scratch")
-			}
-			log.Println(log_message.String())
-
-			// Translate the message
-			gen := proto.ToGeneric()
-
-			// Abort if the translation is a no-op
-			if gen.Opcode == Generic_NOOP {
-				return
-			}
-
-			// Prepare the translation
-			gen.Target = client
-			translated := client.Protocol.New()
-			translated.FromGeneric(gen)
-
-			// Write the translated message
-			client.writer <- translated
-			return
-		}
-	}
-
-	// Don't translate the message if they are the same
-	client.writer <- packet
-}
-
-func (m *Manager) BroadcastToRoom(room *Room, packet any, exclusions ...*Client) {
-	m.Multicast(room.Clients, packet, exclusions...)
-}
-
-func (m *Manager) Multicast(clients map[snowflake.ID]*Client, packet any, exclusions ...*Client) {
-	clients = Filter(clients, exclusions...)
-	for _, client := range clients {
-		go m.Unicast(client, packet)
-	}
-}
-
-func (m *Manager) IsUsernameTaken(name string, excludeID snowflake.ID) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	for id, client := range m.connections {
-		if id != excludeID && client.NameSet && client.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Manager) FindClient(id any) (*Client, bool) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	// Try finding by snowflake ID first
-	if sfID, ok := id.(snowflake.ID); ok {
-		client, found := m.connections[sfID]
-		return client, found
-	}
-
-	// Try finding by username
-	idStr := fmt.Sprintf("%v", id) // Convert id to string for comparison
-	for _, client := range m.connections {
-		if client.NameSet && fmt.Sprintf("%v", client.Name) == idStr {
-			return client, true
-		}
-	}
-
-	// Try finding by UUID
-	if uuidVal, err := uuid.Parse(idStr); err == nil {
-		for _, client := range m.connections {
-			if client.UUID == uuidVal {
-				return client, true
-			}
-		}
-	}
-
-	return nil, false
-}
-
-func Filter(source map[snowflake.ID]*Client, exclusions ...*Client) map[snowflake.ID]*Client {
-	filtered := make(map[snowflake.ID]*Client)
-	for id, client := range source {
-		found := false
-		for _, exclusion := range exclusions {
-			if client.ID == exclusion.ID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			filtered[id] = client
-		}
-	}
-	return filtered
-}
-
-func isTypeDeclaration(val any) bool {
+func (CL4_or_CL3) isTypeDeclaration(val any) bool {
 	if valMap, ok := val.(map[string]any); ok {
 		if cmd, ok := valMap["cmd"].(string); ok && cmd == "type" {
 			return true
@@ -139,33 +13,79 @@ func isTypeDeclaration(val any) bool {
 	return false
 }
 
-// Helper to validate username/room name types
-func validateUsername(name any) error {
-	switch name.(type) {
-	case string, int64, float64, bool:
-		return nil // Valid types
-	default:
-		return fmt.Errorf("username/room value must be a string, boolean, float, or int")
-	}
+// Returns a formatted user object.
+func (s *Server) UserObject(c *Client) *CL4_UserObject {
+	return &CL4_UserObject{ID: c.ID.String(), UUID: c.UUID.String(), Username: c.Username}
 }
 
-// Helper to convert single value or slice/array to []any
-func ToSlice(value any) ([]any, error) {
-	switch v := value.(type) {
-	case nil:
-		return []any{}, nil // Empty slice for nil
-	case []any:
-		return v, nil // Already a slice
-	case string, int64, float64, bool:
-		return []any{v}, nil // Single element slice
-	default:
-		// Try unmarshalling if it's a string that might be a JSON array
-		if strVal, ok := v.(string); ok {
-			var sliceVal []any
-			if err := json.Unmarshal([]byte(strVal), &sliceVal); err == nil {
-				return sliceVal, nil
+func (s *Server) Get_User_List(room RoomKey) []*CL4_UserObject {
+	clients := s.Copy_Clients(room)
+	fullList := make([]*CL4_UserObject, 0)
+
+	for _, client := range clients {
+		if client.Username != nil {
+			fullList = append(fullList, s.UserObject(client))
+		}
+	}
+
+	return fullList
+}
+
+// Get_Clients resolves a CloudLink ID/Username (or an array of them) to a map of clients for Multicasting
+func (s *Server) Get_Clients(room RoomKey, targetID any) Targets {
+	targets := make(Targets)
+	clients := s.Copy_Clients(room)
+
+	// Convert targetID to a slice so we can uniformly process 1 or multiple targets
+	var targetIDs []any
+	if slice, ok := targetID.([]any); ok {
+		targetIDs = slice
+	} else {
+		targetIDs = []any{targetID}
+	}
+
+	for _, tID := range targetIDs {
+		tIDStr := fmt.Sprintf("%v", tID) // Stringify for safe comparison
+		for _, client := range clients {
+			if client.ID.String() == tIDStr || fmt.Sprintf("%v", client.Username) == tIDStr || client.UUID.String() == tIDStr {
+				targets[client] = true
 			}
 		}
-		return nil, fmt.Errorf("value is not a slice, array, or single valid element")
 	}
+
+	return targets
+}
+
+// Get_Target_Rooms converts the dynamic Rooms field into a slice of strings, defaulting to the client's current rooms.
+func (s *Server) Get_Target_Rooms(client *Client, roomsContext any) RoomKeys {
+	if roomsContext == nil || roomsContext == "" {
+		// If the client's rooms list is empty, default to DEFAULT_ROOM defensively
+		if len(client.Rooms) == 0 {
+			return RoomKeys{DEFAULT_ROOM}
+		}
+		return client.Rooms
+	}
+
+	var targetRooms RoomKeys
+	// JSON arrays unmarshal into []any
+	if slice, ok := roomsContext.([]any); ok {
+		for _, r := range slice {
+			targetRooms = append(targetRooms, RoomKey(fmt.Sprintf("%v", r)))
+		}
+	} else {
+		// Fallback for single room string/number
+		targetRooms = append(targetRooms, RoomKey(fmt.Sprintf("%v", roomsContext)))
+	}
+	return targetRooms
+}
+
+// Is_Client_In_Room checks if the client is currently subscribed to a specific room
+func (s *Server) Is_Client_In_Room(client *Client, room RoomKey) bool {
+	clientsInRoom := s.Copy_Clients(room)
+	for _, c := range clientsInRoom {
+		if c.UUID == client.UUID {
+			return true
+		}
+	}
+	return false
 }

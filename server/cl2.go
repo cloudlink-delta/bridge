@@ -5,31 +5,10 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/goccy/go-json"
 )
-
-func NewCL2Packet(c *Client) Protocol {
-	return &CL2Packet{origin: c}
-}
-
-func (p *CL2Packet) New() Protocol {
-	return &CL2Packet{origin: p.origin}
-}
-
-type CL2Packet struct {
-	Command   string `json:"cmd,omitempty"`
-	Mode      string `json:"mode,omitempty"`   // Can be string. "vm" type has "g" or "p"
-	Sender    string `json:"sender,omitempty"` // Parsed from packet
-	Recipient string `json:"recipient,omitempty"`
-	Var       any    `json:"var,omitempty"`  // Variable name for "vm" type
-	Type      string `json:"type,omitempty"` // For JSON response building, e.g. "gs", "ps", "sf", "direct", "vm", "vers"
-	Data      any    `json:"data,omitempty"` // Parsed data or data for JSON response
-	ID        any    `json:"id,omitempty"`   // Recipient ID for "ps" type
-
-	origin  *Client `json:"-"` // Internal field to track the sender client
-	dialect uint    `json:"-"`
-}
 
 // Define a struct to hold regex patterns with their names for ordered matching.
 type cl2Parser struct {
@@ -37,455 +16,313 @@ type cl2Parser struct {
 	re   *regexp.Regexp
 }
 
-// Define the parsers in a slice to enforce matching order (most specific first).
-var orderedCL2Parsers []cl2Parser
-
-func init() {
-	orderedCL2Parsers = []cl2Parser{
-		// Most specific patterns first (more parameters)
-		{ // 5 fields after header: Handles <%l_p> Mode 1 and 2
-			name: "linked_p_vars",
-			re:   regexp.MustCompile(`^<%(l_p)>\s*\n(?P<Mode>[1-2])\s+(?P<Sender>[^\n]*)\s+(?P<Recipient>[^\n]*)\s+(?P<VarName>[^\n]*)\s+(?s)(?P<Data>.*)$`),
-		},
-		{ // 4 fields after header: Handles <%l_g> Mode 1 and 2
-			name: "linked_g_vars",
-			re:   regexp.MustCompile(`^<%(l_g)>\s*\n(?P<Mode>[1-2])\s+(?P<Sender>[^\n]*)\s+(?P<VarName>[^\n]*)\s+(?s)(?P<Data>.*)$`),
-		},
-		{ // 4 fields after header: Handles <%l_p> Mode 0
-			name: "linked_p_data",
-			re:   regexp.MustCompile(`^<%(l_p)>\s*\n(?P<Mode>0)\s+(?P<Sender>[^\n]*)\s+(?P<Recipient>[^\n]*)\s+(?s)(?P<Data>.*)$`),
-		},
-		{ // 3 fields after header: Handles <%ps>
-			name: "private_stream",
-			re:   regexp.MustCompile(`^<%ps>\s*\n(?P<Sender>[^\n]*)\s+(?P<Recipient>[^\n]*)\s+(?s)(?P<Data>.*)$`),
-		},
-		// NOTE: Assuming <%l_g> Mode 0 only has Sender and Data based on typical usage, making it 2 fields after header.
-		// If it *can* have a Recipient field (even if ignored), you'd need a 3-field regex for it here.
-
-		{ // 2 fields after header: Handles <%gs>
-			name: "global_stream",
-			re:   regexp.MustCompile(`^<%gs>\s*\n(?P<Sender>[^\n]*)\s+(?s)(?P<Data>.*)$`),
-		},
-		{ // 2 fields after header: Handles <%l_g> Mode 0
-			name: "linked_g_data",
-			re:   regexp.MustCompile(`^<%(l_g)>\s*\n(?P<Mode>0)\s+(?P<Sender>[^\n]*)\s+(?s)(?P<Data>.*)$`),
-		},
-		{ // 1 field after header: Handles <%sn>
-			name: "set_username",
-			re:   regexp.MustCompile(`^<%sn>\s*\n(?P<Sender>[^\n]*)$`),
-		},
-		{ // 1 field after header: Handles <%ds>
-			name: "disconnect",
-			re:   regexp.MustCompile(`^<%ds>\s*\n(?P<Sender>[^\n]*)$`),
-		},
-		{ // 0-1 field after header: Handles <%rf>, <%sh>, <%rt>
-			name: "simple_cmd",
-			re:   regexp.MustCompile(`^<%(rf|sh|rt)>\s*\n?(?P<Sender>[^\n]*)$`), // Keep \n? for optional sender
-		},
-	}
+// CL2 implements the Protocol interface
+type CL2 struct {
+	*Server
+	parsers []cl2Parser
+	links   map[*Client]string // Stores the CL2 "Soft Link"
+	linksMu sync.RWMutex       // Mutex for thread-safe map access
 }
 
-func (p *CL2Packet) BroadcastMsg(clients []*Client, data any) {
-	for _, client := range clients {
-		if client.Protocol != nil && client.Protocol.DeriveProtocol() != p.DeriveProtocol() {
-			client.manager.Unicast(client, p)
-			continue
-		}
-
-		resp := &CL2Packet{
-			Type: "gs",
-			Data: data,
-		}
-		client.writer <- resp
-	}
-}
-
-func (p *CL2Packet) BroadcastVar(clients []*Client, name any, val any) {
-	for _, client := range clients {
-		if client.Protocol != nil && client.Protocol.DeriveProtocol() != p.DeriveProtocol() {
-			client.manager.Unicast(client, p)
-			continue
-		}
-		if !client.Handshake {
-			continue
-		}
-
-		resp := &CL2Packet{
-			Type: "sf",
-			Data: &CL2Packet{
-				Type: "vm",
-				Mode: "g",
-				Var:  name,
-				Data: val,
+func New_CL2(parent *Server) Protocol {
+	return &CL2{
+		Server: parent,
+		links:  make(map[*Client]string),
+		parsers: []cl2Parser{
+			{
+				name: "linked_p_vars",
+				re:   regexp.MustCompile(`^<%(l_p)>\s*\n(?P<Mode>[1-2])\s+(?P<Sender>[^\n]*)\s+(?P<Recipient>[^\n]*)\s+(?P<VarName>[^\n]*)\s+(?s)(?P<Data>.*)$`),
 			},
-		}
-		client.writer <- resp
-	}
-}
-
-func (p *CL2Packet) UnicastMsg(client *Client, data any) {
-	if client.Protocol != nil && client.Protocol.DeriveProtocol() != p.DeriveProtocol() {
-		client.manager.Unicast(client, p)
-		return
-	}
-
-	resp := &CL2Packet{
-		Type: "ps",
-		Data: data,
-		ID:   client.ID.String(),
-	}
-	client.writer <- resp
-}
-
-func (p *CL2Packet) UnicastVar(client *Client, name any, val any) {
-	if client.Protocol != nil && client.Protocol.DeriveProtocol() != p.DeriveProtocol() {
-		client.manager.Unicast(client, p)
-		return
-	}
-	if !client.Handshake {
-		return
-	}
-
-	resp := &CL2Packet{
-		Type: "sf",
-		ID:   client.ID.String(),
-		Data: &CL2Packet{
-			Type: "vm",
-			Mode: "p",
-			Var:  name,
-			Data: val,
+			{
+				name: "linked_g_vars",
+				re:   regexp.MustCompile(`^<%(l_g)>\s*\n(?P<Mode>[1-2])\s+(?P<Sender>[^\n]*)\s+(?P<VarName>[^\n]*)\s+(?s)(?P<Data>.*)$`),
+			},
+			{
+				name: "linked_p_data",
+				re:   regexp.MustCompile(`^<%(l_p)>\s*\n(?P<Mode>0)\s+(?P<Sender>[^\n]*)\s+(?P<Recipient>[^\n]*)\s+(?s)(?P<Data>.*)$`),
+			},
+			{
+				name: "private_stream",
+				re:   regexp.MustCompile(`^<%ps>\s*\n(?P<Sender>[^\n]*)\s+(?P<Recipient>[^\n]*)\s+(?s)(?P<Data>.*)$`),
+			},
+			{
+				name: "global_stream",
+				re:   regexp.MustCompile(`^<%gs>\s*\n(?P<Sender>[^\n]*)\s+(?s)(?P<Data>.*)$`),
+			},
+			{
+				name: "linked_g_data",
+				re:   regexp.MustCompile(`^<%(l_g)>\s*\n(?P<Mode>0)\s+(?P<Sender>[^\n]*)\s+(?s)(?P<Data>.*)$`),
+			},
+			{
+				name: "set_username",
+				re:   regexp.MustCompile(`^<%sn>\s*\n(?P<Sender>[^\n]*)$`),
+			},
+			{
+				name: "disconnect",
+				re:   regexp.MustCompile(`^<%ds>\s*\n(?P<Sender>[^\n]*)$`),
+			},
+			{
+				name: "simple_cmd",
+				re:   regexp.MustCompile(`^<%(rf|sh)>\s*\n?(?P<Sender>[^\n]*)$`),
+			},
+			{
+				name: "linker",
+				re:   regexp.MustCompile(`^<%(rt|rl)>\s*\n?(?P<Sender>[^\n]*)\n+(?P<Recipient>[^\n]*)$`),
+			},
 		},
 	}
-	client.writer <- resp
 }
 
-func (p *CL2Packet) BroadcastBinder() chan any { return nil }
+func (s *CL2) On_Disconnect(c *Client, rooms RoomKeys) {
+	s.linksMu.Lock()
+	delete(s.links, c)
+	s.linksMu.Unlock()
 
-func (p *CL2Packet) UnicastBinder() chan any { return nil }
+	if c.Username == nil || c.Username == "" {
+		return
+	}
 
-func (p *CL2Packet) Reader(data []byte) bool {
+	userObj := s.UserObject(c)
+
+	for _, room := range rooms { // <--- Loop over `rooms` param
+		s.Broadcast(room, &CL4_or_CL3_Packet{
+			Command: "ulist",
+			Mode:    "remove",
+			Value:   userObj,
+			Rooms:   room,
+		}, c)
+	}
+}
+
+func (s *CL2) Reader(client *Client, data []byte) bool {
 	message := string(data)
-
-	// Don't bother to parse the packet if the first two chars isn't "<%"
 	if !strings.HasPrefix(message, "<%") {
 		return false
 	}
 
-	for _, parser := range orderedCL2Parsers {
+	p := &CL2Packet{}
+	parsed := false
+
+	for _, parser := range s.parsers {
 		if parser.re.MatchString(message) {
 			matches := parser.re.FindStringSubmatch(message)
 			names := parser.re.SubexpNames()
-			parserName := parser.name
 
-			// Clear the struct pointed to by h right before populating
 			captured := make(map[string]string)
-
-			// Iterate through ALL capture groups (matches[1:])
 			for i := 1; i < len(matches); i++ {
-				name := names[i]
-				match := matches[i]
-
-				if name != "" { // It's a NAMED capture group
-					captured[name] = match
-					switch name {
+				if names[i] != "" {
+					captured[names[i]] = matches[i]
+					switch names[i] {
 					case "Sender":
-						p.Sender = match
+						p.Sender = matches[i]
 					case "Recipient":
-						p.Recipient = match
-					case "Data":
-						// Assign data directly here
-						p.Data = match
+						p.Recipient = matches[i]
 					case "Mode":
-						p.Mode = match
+						p.Mode = matches[i]
 					case "VarName":
-						p.Var = match
+						p.Var = matches[i]
 					}
-				} else { // It's an UNNAMED capture group
-					// For specific parsers, the first unnamed group (i=1) is the command.
-					if i == 1 && (strings.HasPrefix(parserName, "linked_") || parserName == "simple_cmd") {
-						p.Command = match
-						captured["Command (unnamed)"] = match
-					}
+				} else if i == 1 && (strings.HasPrefix(parser.name, "linked_") || parser.name == "simple_cmd" || parser.name == "linker") {
+					p.Command = matches[i]
 				}
 			}
 
-			// Fallback Command Extraction (if not set by unnamed group)
 			if p.Command == "" {
-				if !(strings.HasPrefix(parserName, "linked_") || parserName == "simple_cmd") {
-					p.Command = strings.Split(parserName, "_")[0]
-				} else {
-					// This case should ideally not be reached if regex and logic are correct
-					log.Printf("Error: Command wasn't captured or derived for %s", parserName)
-					// return false // Or handle error appropriately
-				}
+				p.Command = strings.Split(parser.name, "_")[0]
 			}
 
-			// Store raw Data string first
-			rawDatString := ""
-			if dataVal, ok := captured["Data"]; ok {
-				rawDatString = dataVal
-				p.Data = rawDatString // Assign raw string first
-			}
-
-			// Attempt to unmarshal Data if it was captured and looks like JSON
-			var jsonData any
-			if rawDatString != "" {
+			if rawDatString, ok := captured["Data"]; ok {
+				var jsonData any
 				if err := json.Unmarshal([]byte(rawDatString), &jsonData); err == nil {
-					p.Data = jsonData // Overwrite Data field *only if* unmarshal succeeds
+					p.Data = jsonData
+				} else {
+					p.Data = rawDatString
 				}
-				// If unmarshal fails, p.Data retains the raw string value - this is safer.
 			}
-
-			// Populate the packet struct
-			return true // Successfully parsed
-		}
-	}
-	log.Printf("Failed to parse CL2 packet: %s", message)
-	return false
-}
-
-func (p *CL2Packet) Bytes() []byte {
-	// Build the appropriate JSON response based on the Type field
-	var reply any
-	if p.Type == "sf" || p.Type == "direct" { // Wrap special feature/direct responses
-		reply = &CL2Packet{
-			Type: p.Type,
-			Data: p.Data, // Assumes Data is already a *CL2Packet struct
-			ID:   p.ID,
-		}
-	} else { // Standard gs, ps, ul, ru responses
-		reply = &CL2Packet{
-			Type: p.Type,
-			Data: p.Data, // Assumes Data is a string payload
-			ID:   p.ID,
+			parsed = true
+			break
 		}
 	}
 
-	b, err := json.Marshal(reply)
-	if err != nil {
-		log.Println("CL2 JSON Marshal Error:", err)
-		return nil
+	if !parsed {
+		log.Printf("Failed to parse CL2 packet: %s", message)
+		return false
 	}
-	return b
+
+	go s.Handler(client, p)
+	return true
 }
 
-func (p *CL2Packet) String() string {
-	return string(p.Bytes())
-}
+func (s *CL2) Handler(client *Client, p *CL2Packet) {
+	log.Printf("%s 🢂 <%s>", client.GiveName(), p.Command)
 
-func (p *CL2Packet) DeriveProtocol() uint { return Protocol_CL2 }
-
-func (p *CL2Packet) DeriveDialect(c *Client) uint {
-	if p.origin.Handshake {
-		return Dialect_CL2_Late
-	} else {
-		return Dialect_CL2_Early
+	if client.dialect == Dialect_Undefined {
+		if p.Command == "sh" {
+			s.Upgrade_Dialect(client, Dialect_CL2_Late)
+		} else {
+			s.Upgrade_Dialect(client, Dialect_CL2_Early)
+		}
 	}
-}
-
-func (p *CL2Packet) Handler(c *Client, m *Manager) {
-	p.origin = c
 
 	switch p.Command {
-	case "sh": // Special Handshake
-		if c.Handshake {
+	case "sh":
+		s.Unicast(client, &CL4_or_CL3_Packet{Command: "server_version", Value: "0.1.5"})
+		s.Unicast(client, &CL4_or_CL3_Packet{
+			Command: "ulist",
+			Mode:    "set",
+			Value:   s.Get_User_List(DEFAULT_ROOM),
+			Rooms:   DEFAULT_ROOM,
+		})
+
+	case "rl": // Create Soft Link
+		s.linksMu.Lock()
+		s.links[client] = p.Recipient
+		s.linksMu.Unlock()
+		log.Printf("%s 🔗 Soft-linked to user ID: %s", client.GiveName(), p.Recipient)
+
+	case "rt": // Undo Soft Link
+		s.linksMu.Lock()
+		delete(s.links, client)
+		s.linksMu.Unlock()
+		log.Printf("%s 🔗 Removed soft-link", client.GiveName())
+
+	case "set", "sn":
+		if client.Username != nil && client.Username != "" {
 			return
 		}
-		c.UpdateHandshake(true)
-		c.JoinRoom(m.DefaultRoom)
+		client.Username = p.Sender
 
-		resp := &CL2Packet{
-			Type: "direct",
-			Data: &CL2Packet{
-				Type: "vers",
-				Data: m.ServerVersion,
-			},
-		}
-		c.writer <- resp
-		log.Printf("Client %s completed CL2 handshake", c.ID)
+		s.Unicast(client, &CL4_or_CL3_Packet{
+			Command: "ulist",
+			Mode:    "set",
+			Value:   s.Get_User_List(DEFAULT_ROOM),
+			Rooms:   DEFAULT_ROOM,
+		})
 
-	case "rf": // Refresh User List
-		log.Printf("Client %s requested user list refresh", c.ID)
-		ulistStr := m.DefaultRoom.GenerateUserlistString()
-		if ulistStr == "ul;" {
-			ulistStr = ""
-		} else if strings.HasSuffix(ulistStr, "ul;") {
-			ulistStr = strings.TrimSuffix(ulistStr, "ul;")
-		}
-		resp := &CL2Packet{
-			Type: "ul",
-			Data: ulistStr,
-		}
-		c.writer <- resp
+		s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			Command: "ulist",
+			Mode:    "add",
+			Value:   s.UserObject(client),
+			Rooms:   DEFAULT_ROOM,
+		}, client)
 
-	case "set": // Set Username
-		if c.NameSet {
-			log.Printf("Client %s attempted to set username again", c.ID)
+	case "rf":
+		s.Unicast(client, &CL4_or_CL3_Packet{
+			Command: "ulist",
+			Mode:    "set",
+			Value:   s.Get_User_List(DEFAULT_ROOM),
+			Rooms:   DEFAULT_ROOM,
+		})
+
+	case "gs", "global":
+		s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			Command: "gmsg",
+			Value:   p.Data,
+			Rooms:   DEFAULT_ROOM,
+			Origin:  s.UserObject(client),
+		})
+
+	case "ps", "private":
+		if client.Username == nil || client.Username == "" {
 			return
 		}
-		c.SetName(p.Sender)
-		log.Printf("Client %s set username to %s", c.ID, p.Sender)
+		targets := s.Get_Clients(DEFAULT_ROOM, p.Recipient)
+		s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			Command: "pmsg",
+			Value:   p.Data,
+			Origin:  s.UserObject(client),
+		}, targets)
 
-		ulistStr := m.DefaultRoom.GenerateUserlistString()
-		if ulistStr == "ul;" {
-			ulistStr = ""
-		} else if strings.HasSuffix(ulistStr, "ul;") {
-			ulistStr = strings.TrimSuffix(ulistStr, "ul;")
-		}
-		ulistPacket := &CL2Packet{
-			Type: "ul",
-			Data: ulistStr,
-		}
-		for _, client := range m.DefaultRoom.ClientsAsSlice() {
-			if client.Protocol != nil {
-				switch client.Protocol.DeriveProtocol() {
-				case Protocol_CL2:
-					client.writer <- ulistPacket
-				case Protocol_CL3or4:
-					if cl3, ok := client.Protocol.(*CL3or4Packet); ok {
-						cl3.SendUserlist(client, m.DefaultRoom)
-					}
-				}
+	case "l_g": // Linked Global
+		if p.Mode == "0" {
+			// Mode 0: Linked Global Data -> Multicast to the user stored in Soft Link
+			s.linksMu.RLock()
+			targetID, exists := s.links[client]
+			s.linksMu.RUnlock()
+
+			if exists && targetID != "" {
+				targets := s.Get_Clients(DEFAULT_ROOM, targetID)
+				s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+					Command: "linked_gmsg", // Internal cross-protocol command
+					Value:   p.Data,
+					Origin:  s.UserObject(client),
+				}, targets)
+			}
+		} else if p.Mode == "1" {
+			// Mode 1: Standard Global Variable Broadcast
+			s.roomsMu.RLock()
+			r, exists := s.RoomsMap[DEFAULT_ROOM]
+			s.roomsMu.RUnlock()
+			if exists {
+				r.GlobalVars.Store(p.Var, p.Data)
+			}
+			s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+				Command: "gvar",
+				Name:    p.Var,
+				Value:   p.Data,
+				Origin:  s.UserObject(client),
+			})
+		} else if p.Mode == "2" {
+			// Mode 2: Directed Global Variable -> Multicast to Soft Link
+			s.linksMu.RLock()
+			targetID, exists := s.links[client]
+			s.linksMu.RUnlock()
+
+			if exists && targetID != "" {
+				targets := s.Get_Clients(DEFAULT_ROOM, targetID)
+				s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+					Command: "gvar", // CL4 gvar naturally translates to CL2 `vm` mode `g`
+					Name:    p.Var,
+					Value:   p.Data,
+					Origin:  s.UserObject(client),
+				}, targets)
 			}
 		}
 
-	case "global": // Global Stream Message
-		log.Printf("Client %s sent global message", c.ID)
-		m.DefaultRoom.GmsgState = p.Data
-		p.BroadcastMsg(m.DefaultRoom.ClientsAsSlice(), p.Data)
-
-	case "private": // Private Stream Message
-		log.Printf("Client %s sent private message to %s", c.ID, p.Recipient)
-		if targetClient, found := m.FindClient(p.Recipient); found {
-			p.UnicastMsg(targetClient, p.Data)
-		} else {
-			log.Printf("Target client %s not found for private message", p.Recipient)
-		}
-
-	case "l_g": // Linked Global Data/Var
-		if !c.Handshake {
+	case "l_p": // Linked Private
+		if client.Username == nil || client.Username == "" {
 			return
 		}
-		switch p.Mode {
-		case "0":
-			log.Printf("Client %s sent linked global data", c.ID)
-		case "1", "2":
-			log.Printf("Client %s set global var '%s'", c.ID, p.Var)
-			m.DefaultRoom.SetGvar(p.Var, p.Data)
-			p.BroadcastVar(m.DefaultRoom.ClientsAsSlice(), p.Var, p.Data)
+
+		targets := s.Get_Clients(DEFAULT_ROOM, p.Recipient)
+
+		if p.Mode == "0" {
+			// Mode 0: Linked Private Data -> Multicast to Recipient
+			s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+				Command: "linked_pmsg", // Internal cross-protocol command
+				Value:   p.Data,
+				Origin:  s.UserObject(client),
+			}, targets)
+		} else if p.Mode == "1" || p.Mode == "2" {
+			// Mode 1 & 2: Private Var -> Multicast to Recipient
+			s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+				Command: "pvar", // CL4 pvar naturally translates to CL2 `vm` mode `p`
+				Name:    p.Var,
+				Value:   p.Data,
+				Origin:  s.UserObject(client),
+			}, targets)
 		}
 
-	case "l_p": // Linked Private Data/Var
-		if !c.Handshake {
-			return
-		}
-		switch p.Mode {
-		case "0":
-			log.Printf("Client %s sent linked private data to %s", c.ID, p.Recipient)
-		case "1", "2":
-			log.Printf("Client %s set private var '%s' for %s", c.ID, p.Var, p.Recipient)
-			if targetClient, found := m.FindClient(p.Recipient); found {
-				p.UnicastVar(targetClient, p.Var, p.Data)
-			}
-		}
-
-	case "disconnect": // Disconnect command
-		log.Printf("Client %s sent disconnect command", c.ID)
-
-	default:
-		log.Printf("Unknown or unhandled CL2 Command: %s from client %s", p.Command, c.ID)
+	case "disconnect", "ds":
+		// Handled gracefully by the disconnect routines
 	}
 }
 
-func (p *CL2Packet) IsJSON() bool { return false }
-
-func (p *CL2Packet) SpoofServerVersion() string { return "" }
-
-func (p *CL2Packet) ToGeneric() *Generic {
-	g := &Generic{
-		Origin:  p.origin,
-		Payload: p,
-	}
-
-	if p.Recipient != "" {
-		g.Opcode = Generic_Unicast
-	} else {
-		g.Opcode = Generic_Broadcast
-	}
-
-	return g
-}
-
-func (p *CL2Packet) FromGeneric(g *Generic) {
-	p.origin = g.Origin
-	if p.origin != nil {
-		if str, ok := p.origin.Name.(string); ok && str != "" {
-			p.Sender = str
+func (s *CL2) Upgrade_Dialect(c *Client, newdialect uint) {
+	if newdialect > c.dialect {
+		var basestring string
+		if c.dialect == Dialect_Undefined {
+			basestring = fmt.Sprintf("%s 𝐢 Detected ", c.GiveName())
 		} else {
-			p.Sender = fmt.Sprintf("%v", p.origin.ID)
-		}
-	}
-
-	var val, name any
-	switch payload := g.Payload.(type) {
-	case *CL3or4Packet:
-		val = payload.Val
-		name = payload.Name
-	case *CL2Packet:
-		val = payload.Data
-		name = payload.Var
-	case *ScratchPacket:
-		val = payload.Value
-		name = payload.Name
-	}
-
-	switch g.Opcode {
-	case Generic_Broadcast:
-		if name != nil {
-			p.Type = "vm"
-			p.Mode = "g"
-			p.Var = name
-		} else {
-			p.Type = "gs"
-		}
-		p.Data = val
-
-		if g.Target != nil && g.Target.Handshake {
-			nested := &CL2Packet{
-				Type: p.Type,
-				Mode: p.Mode,
-				Var:  p.Var,
-				Data: p.Data,
-			}
-			p.Type = "sf"
-			p.Mode = ""
-			p.Var = nil
-			p.Data = nested
-		}
-	case Generic_Unicast:
-		if name != nil {
-			p.Type = "vm"
-			p.Mode = "p"
-			p.Var = name
-		} else {
-			p.Type = "ps"
-		}
-		p.Data = val
-		if g.Target != nil {
-			p.ID = g.Target.ID.String()
+			basestring = fmt.Sprintf("%s 𝐢 Upgraded to ", c.GiveName())
 		}
 
-		if g.Target != nil && g.Target.Handshake {
-			nested := &CL2Packet{
-				Type: p.Type,
-				Mode: p.Mode,
-				Var:  p.Var,
-				Data: p.Data,
-			}
-			p.Type = "sf"
-			p.Mode = ""
-			p.Var = nil
-			p.Data = nested
+		c.dialect = newdialect
+		switch c.dialect {
+		case Dialect_CL2_Early:
+			log.Println(basestring + "CL2 dialect (Early)")
+		case Dialect_CL2_Late:
+			log.Println(basestring + "CL2 dialect (Late)")
 		}
 	}
 }

@@ -7,201 +7,168 @@ import (
 	"github.com/kaptinlin/jsonschema"
 )
 
-func NewScratchPacket(c *Client) Protocol {
-	return &ScratchPacket{origin: c}
+type Scratch_Handler struct {
+	Schema *jsonschema.Schema
+	*Server
 }
 
-func (p *ScratchPacket) New() Protocol {
-	return &ScratchPacket{origin: p.origin}
+func New_Scratch(parent *Server) Protocol {
+	schema, err := jsonschema.FromStruct[ScratchPacket]()
+	if err != nil {
+		panic(err)
+	}
+
+	return &Scratch_Handler{
+		Schema: schema,
+		Server: parent,
+	}
 }
 
-type ScratchPacket struct {
-	Method    string `json:"method" jsonschema:"required"`
-	ProjectID string `json:"project_id,omitempty"`
-	User      string `json:"user,omitempty"`
-	Name      any    `json:"name,omitempty"`
-	NewName   any    `json:"new_name,omitempty"`
-	Value     any    `json:"value,omitempty"`
+func (s Scratch_Handler) On_Disconnect(c *Client, rooms RoomKeys) {
+	if c.Username == nil || c.Username == "" {
+		return
+	}
 
-	origin  *Client `json:"-"`
-	dialect uint    `json:"-"`
+	userObj := s.UserObject(c)
+
+	for _, room := range rooms {
+		s.Broadcast(room, &CL4_or_CL3_Packet{
+			Command: "ulist",
+			Mode:    "remove",
+			Value:   userObj,
+			Rooms:   room,
+		}, c)
+	}
 }
 
-func (p *ScratchPacket) BroadcastMsg(clients []*Client, data any) {}
-
-func (p *ScratchPacket) BroadcastVar(clients []*Client, name any, val any) {}
-
-func (p *ScratchPacket) UnicastMsg(client *Client, data any) {}
-
-func (p *ScratchPacket) UnicastVar(client *Client, name any, val any) {}
-
-func (p *ScratchPacket) BroadcastBinder() chan any { return nil }
-
-func (p *ScratchPacket) UnicastBinder() chan any { return nil }
-
-func (p *ScratchPacket) Reader(data []byte) bool {
+func (s Scratch_Handler) Reader(client *Client, data []byte) bool {
 	if !json.Valid(data) {
-		log.Println("Scratch Reader: Invalid JSON received")
 		return false
 	}
-
-	// Schema validation (using jsonschema)
-	schema := jsonschema.FromStruct[ScratchPacket]()
-	result := schema.Validate(data)
+	result := s.Schema.Validate(data)
 	if !result.IsValid() {
-		log.Printf("Scratch Packet failed schema validation: %v", result)
 		return false
 	}
-
-	// Unmarshal into the struct
+	var p *ScratchPacket
 	if err := json.Unmarshal(data, &p); err != nil {
-		log.Printf("Scratch JSON Unmarshal Error: %s", err)
 		return false
 	}
-
-	// Basic check: Method must exist
 	if p.Method == "" {
-		log.Println("Scratch Reader: Packet missing required 'method' field")
 		return false
 	}
 
+	go s.Handler(client, p)
 	return true
 }
 
-func (p *ScratchPacket) Bytes() []byte {
-	b, err := json.Marshal(p)
-	if err != nil {
-		log.Println(err)
-		return nil
-	}
-	return b
-}
+func (s Scratch_Handler) Handler(client *Client, p *ScratchPacket) {
+	log.Printf("%s 🢂  %s", client.GiveName(), p)
 
-func (p *ScratchPacket) String() string { return string(p.Bytes()) }
-
-func (p *ScratchPacket) DeriveProtocol() uint { return Protocol_Scratch }
-
-func (p *ScratchPacket) DeriveDialect(c *Client) uint { return Dialect_Undefined }
-
-func (p *ScratchPacket) Handler(c *Client, m *Manager) {
 	switch p.Method {
 	case "handshake":
-		if c.Handshake {
+
+		// Don't allow repeated handshakes on the same session
+		if client.Username != nil && client.Username != "" {
+			s.Respond_With_Code(client.Conn, Generic_Error)
+			client.Conn.Close()
 			return
 		}
-		c.SetName(p.User)
-		project := m.CreateRoom(p.ProjectID)
-		c.JoinRoom(project)
-		c.UpdateHandshake(true)
-		for name, value := range project.GetAllGvars() {
-			m.Unicast(c, &ScratchPacket{
-				Method: "set",
-				Name:   name,
-				Value:  value,
+
+		// Require a username
+		if p.User == "" {
+			s.Respond_With_Code(client.Conn, Username_Error)
+			client.Conn.Close()
+			return
+		}
+
+		// Set values for setup
+		client.Username = p.User
+		projectRoom := RoomKey(p.ProjectID)
+
+		// Abort if the server is "busy"
+		if !s.DoesRoomExist(projectRoom) && !s.CanAllocateNRooms(client, 1) {
+			s.Respond_With_Code(client.Conn, Overloaded_Status)
+			client.Conn.Close()
+			return
+		}
+
+		// The Scratch protocol cannot use differing room contexts
+		s.Unsubscribe(client, DEFAULT_ROOM)
+		s.Subscribe(client, projectRoom)
+
+		// Sync Shared Variables!
+		s.roomsMu.RLock()
+		r, exists := s.RoomsMap[projectRoom]
+		s.roomsMu.RUnlock()
+
+		if exists {
+			r.GlobalVars.Range(func(key, value any) bool {
+				s.Unicast(client, &ScratchPacket{
+					Method: "set",
+					Name:   key,
+					Value:  value,
+				})
+				return true
 			})
 		}
 
-	case "set":
-		if !c.Handshake {
+	case "set", "create":
+		if client.Username == nil || len(client.Rooms) == 0 {
 			return
 		}
-		project := c.AllRooms()[0]
-		project.SetGvar(p.Name, p.Value)
-		m.BroadcastToRoom(project, &ScratchPacket{
-			Method: "set",
-			Name:   p.Name,
-			Value:  p.Value,
-		})
+		projectRoom := client.Rooms[0]
 
-	case "create":
-		if !c.Handshake {
-			return
+		s.roomsMu.RLock()
+		r, exists := s.RoomsMap[projectRoom]
+		s.roomsMu.RUnlock()
+		if exists {
+			r.GlobalVars.Store(p.Name, p.Value)
 		}
-		project := c.AllRooms()[0]
-		project.SetGvar(p.Name, p.Value)
 
-		m.BroadcastToRoom(project, &ScratchPacket{
-			Method: "create",
+		s.Broadcast(projectRoom, &ScratchPacket{
+			Method: p.Method,
 			Name:   p.Name,
 			Value:  p.Value,
 		})
 
 	case "rename":
-		if !c.Handshake {
+		if client.Username == nil || len(client.Rooms) == 0 {
 			return
 		}
-		project := c.AllRooms()[0]
-		old := project.GetGvar(p.Name)
-		project.SetGvar(p.NewName, old)
-		project.DeleteGvar(p.Name)
+		projectRoom := client.Rooms[0]
 
-		m.BroadcastToRoom(project, &ScratchPacket{
+		s.roomsMu.RLock()
+		r, exists := s.RoomsMap[projectRoom]
+		s.roomsMu.RUnlock()
+		if exists {
+			if oldVal, ok := r.GlobalVars.Load(p.Name); ok {
+				r.GlobalVars.Store(p.NewName, oldVal)
+				r.GlobalVars.Delete(p.Name)
+			}
+		}
+
+		s.Broadcast(projectRoom, &ScratchPacket{
 			Method:  "rename",
 			Name:    p.Name,
 			NewName: p.NewName,
 		})
 
 	case "delete":
-		if !c.Handshake {
+		if client.Username == nil || len(client.Rooms) == 0 {
 			return
 		}
-		project := c.AllRooms()[0]
-		project.DeleteGvar(p.Name)
+		projectRoom := client.Rooms[0]
 
-		m.BroadcastToRoom(project, &ScratchPacket{
+		s.roomsMu.RLock()
+		r, exists := s.RoomsMap[projectRoom]
+		s.roomsMu.RUnlock()
+		if exists {
+			r.GlobalVars.Delete(p.Name)
+		}
+
+		s.Broadcast(projectRoom, &ScratchPacket{
 			Method: "delete",
 			Name:   p.Name,
 		})
-
-	default:
-		log.Println("Unknown Scratch Method")
-	}
-}
-
-func (p *ScratchPacket) IsJSON() bool { return true }
-
-func (p *ScratchPacket) SpoofServerVersion() string { return "" }
-
-func (p *ScratchPacket) ToGeneric() *Generic {
-	g := &Generic{
-		Origin:  p.origin,
-		Payload: p,
-	}
-
-	switch p.Method {
-	case "set", "create", "rename", "delete":
-		g.Opcode = Generic_Broadcast
-	default:
-		g.Opcode = Generic_NOOP
-	}
-
-	return g
-}
-
-func (p *ScratchPacket) FromGeneric(g *Generic) {
-	p.origin = g.Origin
-
-	var val, name any
-	switch payload := g.Payload.(type) {
-	case *CL3or4Packet:
-		val = payload.Val
-		name = payload.Name
-	case *CL2Packet:
-		val = payload.Data
-		name = payload.Var
-	case *ScratchPacket:
-		val = payload.Value
-		name = payload.Name
-	}
-
-	switch g.Opcode {
-	case Generic_Broadcast:
-		p.Method = "set"
-		if name != nil {
-			p.Name = name
-		} else {
-			p.Name = "message" // Scratch expects variables, use a fallback variable name if it's a generic message
-		}
-		p.Value = val
 	}
 }
