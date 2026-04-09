@@ -7,22 +7,20 @@ replace (
 	github.com/cloudlink-delta/duplex => ../duplex
 )
 
-require (
-	github.com/cloudlink-delta/bridge/server v0.0.0-00010101000000-000000000000
-	github.com/cloudlink-delta/duplex v0.0.0-00010101000000-000000000000
-	github.com/goccy/go-json v0.10.6
-	github.com/gofiber/contrib/websocket v1.3.4
-	github.com/gofiber/fiber/v2 v2.52.12
-)
+require github.com/cloudlink-delta/bridge/server v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9 // indirect
+	github.com/cloudlink-delta/duplex v0.0.0-00010101000000-000000000000 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fasthttp/websocket v1.5.8 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
+	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/gofiber/contrib/websocket v1.3.4 // indirect
+	github.com/gofiber/fiber/v2 v2.52.12 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/kaptinlin/go-i18n v0.3.0 // indirect

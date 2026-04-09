@@ -4,30 +4,106 @@ import (
 	"log"
 	"maps"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/snowflake"
 	"github.com/cloudlink-delta/duplex"
 	"github.com/goccy/go-json"
 	"github.com/gofiber/contrib/websocket"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
-func New(instance *duplex.Instance, config *Config) *Server {
+func New(designation string, config *Config) *Server {
 	node, err := snowflake.NewNode(1)
 	if err != nil {
 		panic(err)
 	}
 
+	if designation == "" {
+		panic("designation required")
+	}
+
+	if config == nil {
+		panic("config required")
+	}
+
+	if config.Maximum_Rooms <= 0 {
+		panic("invalid maximum rooms")
+	}
+
+	if config.Maximum_Clients <= 0 {
+		panic("invalid maximum clients")
+	}
+
+	if config.Address == "" {
+		config.Address = ":3000"
+	}
+
+	// Create instance and bridge manager
+	instance := duplex.New("bridge@" + designation)
+	instance.IsBridge = true
+
 	server := &Server{
+		Close:        make(chan bool),
+		Done:         make(chan bool),
 		Clients:      make(Targets),
 		Config:       config,
 		instance:     instance,
 		RoomsMap:     make(map[RoomKey]*Room),
 		snowflakeGen: node,
+		App: fiber.New(fiber.Config{
+			JSONEncoder: json.Marshal,
+			JSONDecoder: json.Unmarshal,
+		}),
 	}
 
+	// Configure bridge websocket
+	server.App.Use("*", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	server.App.Get("*", websocket.New(func(c *websocket.Conn) {
+		server.Run_Client(c)
+	}))
+
 	return server
+}
+
+func (s *Server) Run() {
+	// Init waitgroup
+	var wg sync.WaitGroup
+	wg.Add(2) // Add 2 waitgroup tasks
+
+	// Launch fiber app
+	go func() {
+		defer wg.Done()
+		if err := s.App.Listen(s.Config.Address); err != nil {
+			log.Printf("Fiber app error: %v", err)
+		}
+	}()
+
+	// Launch instance app
+	go func() {
+		defer wg.Done()
+		s.instance.Run()
+	}()
+
+	// Wait for close signal
+	<-s.Close
+
+	// Shutdown components
+	_ = s.App.Shutdown()
+	s.instance.Close <- true
+	<-s.instance.Done
+
+	wg.Wait() // Wait for both apps to finish
+	s.Done <- true
 }
 
 func (s *Server) Copy_Clients(room RoomKey) Clients {

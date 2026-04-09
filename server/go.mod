@@ -9,6 +9,7 @@ require (
 	github.com/cloudlink-delta/duplex v0.0.0-00010101000000-000000000000
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/contrib/websocket v1.3.4
+	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/google/uuid v1.6.0
 	github.com/kaptinlin/jsonschema v0.7.7
 )
@@ -20,7 +21,6 @@ require (
 	github.com/fasthttp/websocket v1.5.8 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gofiber/fiber/v2 v2.52.12 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/kaptinlin/go-i18n v0.3.0 // indirect
 	github.com/kaptinlin/jsonpointer v0.4.17 // indirect

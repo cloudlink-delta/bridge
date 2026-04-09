@@ -7,6 +7,7 @@ import (
 	"github.com/cloudlink-delta/duplex"
 	"github.com/goccy/go-json"
 	"github.com/gofiber/contrib/websocket"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/kaptinlin/jsonschema"
 )
@@ -78,9 +79,14 @@ type Config struct {
 	// It is more network heavy to use instead of incremental updates (the default behavior),
 	// But it addresses unfixed bugs with older CL clients.
 	Force_Set bool
+
+	// Defines the listening address of the WebSocket bridge.
+	Address string
 }
 
 type Server struct {
+	Close        chan bool
+	Done         chan bool
 	Config       *Config
 	instance     *duplex.Instance
 	Clients      Targets
@@ -88,6 +94,8 @@ type Server struct {
 	RoomsMap     map[RoomKey]*Room // Replaces clients map
 	roomsMu      sync.RWMutex      // Replaces clientsMu
 	snowflakeGen *snowflake.Node
+	App          *fiber.App
+	Address      string
 }
 
 // CL4_or_CL3 implements the Protocol interface
