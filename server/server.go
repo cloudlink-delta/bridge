@@ -72,6 +72,15 @@ func New(designation string, config *Config) *Server {
 		server.Run_Client(c)
 	}))
 
+	// Configure instance callbacks
+	instance.OnCreate = func() {
+		// Attempt to connect to the discovery server
+		instance.Connect("discovery@" + designation)
+	}
+	instance.AfterNegotiation = func(peer *duplex.Peer) {}
+	instance.OnOpen = func(peer *duplex.Peer) {}
+	instance.OnClose = func(peer *duplex.Peer) {}
+
 	return server
 }
 
