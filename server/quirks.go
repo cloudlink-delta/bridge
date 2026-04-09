@@ -248,10 +248,11 @@ func (s *CL4_or_CL3) Apply_Quirks(c *Client, p any) any {
 		}
 
 	case "motd":
-		if c.dialect == Dialect_CL3_0_1_5 {
+		switch c.dialect {
+		case Dialect_CL3_0_1_5:
 			log.Printf("%s 🔧 Applied Quirks: MOTD is not supported on the 0.1.5 dialect", c.GiveName())
 			return nil // 0.1.5 does not support MOTD
-		} else if c.dialect == Dialect_CL3_0_1_7 {
+		case Dialect_CL3_0_1_7:
 			packet.Command = "direct"
 			packet.Value = map[string]any{
 				"cmd": "motd",
@@ -299,7 +300,8 @@ func (s *CL4_or_CL3) Apply_Quirks(c *Client, p any) any {
 			} else {
 				// 0.1.8 and 0.1.9 DO support differential updates (mode: "set", "add", "remove")
 				// However, they expect Strings or Slices of Strings, not UserObjects.
-				if packet.Mode == "set" {
+				switch packet.Mode {
+				case "set":
 					if userList, ok := packet.Value.([]*CL4_UserObject); ok {
 						strSlice := make([]any, len(userList))
 						for i, u := range userList {
@@ -307,7 +309,7 @@ func (s *CL4_or_CL3) Apply_Quirks(c *Client, p any) any {
 						}
 						packet.Value = strSlice
 					}
-				} else if packet.Mode == "add" || packet.Mode == "remove" {
+				case "add", "remove":
 					if userObj, ok := packet.Value.(*CL4_UserObject); ok {
 						packet.Value = userObj.Username
 					}

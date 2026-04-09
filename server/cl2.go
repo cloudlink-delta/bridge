@@ -234,7 +234,8 @@ func (s *CL2) Handler(client *Client, p *CL2Packet) {
 		}, targets)
 
 	case "l_g": // Linked Global
-		if p.Mode == "0" {
+		switch p.Mode {
+		case "0":
 			// Mode 0: Linked Global Data -> Multicast to the user stored in Soft Link
 			s.linksMu.RLock()
 			targetID, exists := s.links[client]
@@ -248,7 +249,7 @@ func (s *CL2) Handler(client *Client, p *CL2Packet) {
 					Origin:  s.UserObject(client),
 				}, targets)
 			}
-		} else if p.Mode == "1" {
+		case "1":
 			// Mode 1: Standard Global Variable Broadcast
 			s.roomsMu.RLock()
 			r, exists := s.RoomsMap[DEFAULT_ROOM]
@@ -262,7 +263,7 @@ func (s *CL2) Handler(client *Client, p *CL2Packet) {
 				Value:   p.Data,
 				Origin:  s.UserObject(client),
 			})
-		} else if p.Mode == "2" {
+		case "2":
 			// Mode 2: Directed Global Variable -> Multicast to Soft Link
 			s.linksMu.RLock()
 			targetID, exists := s.links[client]
@@ -286,14 +287,15 @@ func (s *CL2) Handler(client *Client, p *CL2Packet) {
 
 		targets := s.Get_Clients(DEFAULT_ROOM, p.Recipient)
 
-		if p.Mode == "0" {
+		switch p.Mode {
+		case "0":
 			// Mode 0: Linked Private Data -> Multicast to Recipient
 			s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
 				Command: "linked_pmsg", // Internal cross-protocol command
 				Value:   p.Data,
 				Origin:  s.UserObject(client),
 			}, targets)
-		} else if p.Mode == "1" || p.Mode == "2" {
+		case "1", "2":
 			// Mode 1 & 2: Private Var -> Multicast to Recipient
 			s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
 				Command: "pvar", // CL4 pvar naturally translates to CL2 `vm` mode `p`

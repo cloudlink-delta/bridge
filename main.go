@@ -20,7 +20,7 @@ func main() {
 		Maximum_Clients:    1000,
 		Force_Set:          true,
 		Address:            "127.0.0.1:3000",
-	})
+	}, nil)
 
 	// Graceful shutdown handler
 	c := make(chan os.Signal, 1)

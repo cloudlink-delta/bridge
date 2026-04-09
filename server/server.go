@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func New(designation string, config *Config) *Server {
+func New(designation string, server_config *Config, duplex_config *duplex.Config) *Server {
 	node, err := snowflake.NewNode(1)
 	if err != nil {
 		panic(err)
@@ -25,31 +25,31 @@ func New(designation string, config *Config) *Server {
 		panic("designation required")
 	}
 
-	if config == nil {
+	if server_config == nil {
 		panic("config required")
 	}
 
-	if config.Maximum_Rooms <= 0 {
+	if server_config.Maximum_Rooms <= 0 {
 		panic("invalid maximum rooms")
 	}
 
-	if config.Maximum_Clients <= 0 {
+	if server_config.Maximum_Clients <= 0 {
 		panic("invalid maximum clients")
 	}
 
-	if config.Address == "" {
-		config.Address = ":3000"
+	if server_config.Address == "" {
+		server_config.Address = ":3000"
 	}
 
 	// Create instance and bridge manager
-	instance := duplex.New("bridge@" + designation)
+	instance := duplex.New("bridge@"+designation, duplex_config)
 	instance.IsBridge = true
 
 	server := &Server{
 		Close:        make(chan bool),
 		Done:         make(chan bool),
 		Clients:      make(Targets),
-		Config:       config,
+		Config:       server_config,
 		instance:     instance,
 		RoomsMap:     make(map[RoomKey]*Room),
 		snowflakeGen: node,

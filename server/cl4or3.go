@@ -396,7 +396,7 @@ func (s CL4_or_CL3) Derive_Dialect(p *CL4_or_CL3_Packet, c *Client) {
 		} else {
 			s.Upgrade_Dialect(c, Dialect_CL4_0_1_9)
 		}
-	} else if p.Command == "link" || (p.Listener != nil && p.Listener != nil) {
+	} else if p.Command == "link" || p.Listener != nil {
 		s.Upgrade_Dialect(c, Dialect_CL4_0_1_8)
 	} else if p.Command == "direct" && s.isTypeDeclaration(p.Value) {
 		s.Upgrade_Dialect(c, Dialect_CL3_0_1_7)
