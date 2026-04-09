@@ -83,7 +83,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		log.Printf("Discovery services connected as %s", peer.GiveName())
 
 		// Register the bridge as an entry
-		reply := peer.SendAndWaitForReply("REGISTER_ACK", &duplex.TxPacket{
+		reply := peer.SendAndWaitForReply(&duplex.TxPacket{
 			Packet: duplex.Packet{
 				Opcode:   "REGISTER",
 				Origin:   "bridge@" + designation,
@@ -94,7 +94,12 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 			Payload: "bridge",
 		})
 
-		log.Printf("Got reply %v", reply)
+		switch reply.Opcode {
+		case "REGISTER_ACK":
+			log.Printf("Registered on %s successfully!", peer.GiveName())
+		default:
+			log.Printf("Failed to register on %s: %v", peer.GiveName(), reply)
+		}
 	}
 
 	// Stubs
