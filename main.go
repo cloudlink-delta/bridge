@@ -7,7 +7,8 @@ import (
 	"sync"
 	"syscall"
 
-	bridge "github.com/cloudlink-delta/bridge/server"
+	"github.com/cloudlink-delta/bridge/server"
+
 	"github.com/cloudlink-delta/duplex"
 	"github.com/goccy/go-json"
 	"github.com/gofiber/contrib/websocket"
@@ -15,7 +16,6 @@ import (
 )
 
 func main() {
-
 	// Define a globally unique designation that will be used to identify this bridge server.
 	const DESIGNATION = "bridge@US-NKY-1"
 
@@ -26,12 +26,14 @@ func main() {
 		JSONEncoder: json.Marshal,
 		JSONDecoder: json.Unmarshal,
 	})
-	manager := bridge.New(instance)
-
-	// Configure manager settings
-	manager.Config.EnableMOTD = true
-	manager.Config.MOTDMessage = "CloudLink Bridge Server - Use bridge@US-NKY-1 to connect on CloudLink Delta!"
-	manager.Config.ServeIPAddresses = true
+	manager := server.New(instance, &server.Config{
+		Enable_MOTD:        true,
+		MOTD_Message:       "CloudLink Bridge Server - Use bridge@US-NKY-1 to connect on CloudLink Delta!",
+		Serve_IP_Addresses: true,
+		Maximum_Rooms:      100,
+		Maximum_Clients:    1000,
+		Force_Set:          true,
+	})
 
 	// Configure bridge websocket
 	app.Use("/*", func(c *fiber.Ctx) error {
@@ -43,9 +45,7 @@ func main() {
 	})
 
 	app.Get("/*", websocket.New(func(c *websocket.Conn) {
-		client := manager.Create(c)
-		defer manager.Destroy(client)
-		client.Runner()
+		manager.Run_Client(c)
 	}))
 
 	// Init waitgroup

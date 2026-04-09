@@ -1,130 +1,130 @@
-package cloudlink
+package server
 
 import (
 	"fmt"
 	"log"
 	"sync"
 
-	"github.com/bwmarrin/snowflake"
 	"github.com/gofiber/contrib/websocket"
-	"github.com/google/uuid"
 )
 
-type Client struct {
-	ID        snowflake.ID    `json:"id,omitempty"`
-	UUID      uuid.UUID       `json:"uuid,omitempty"`
-	Name      any             `json:"username,omitempty"`
-	NameSet   bool            `json:"nameset"`
-	Handshake bool            `json:"handshake"`
-	Rooms     map[any]*Room   `json:"rooms,omitempty"`
-	roomlock  *sync.Mutex     `json:"-"`
-	conn      *websocket.Conn `json:"-"`
-	exit      chan bool       `json:"-"`
-	reader    chan any        `json:"-"`
-	writer    chan any        `json:"-"`
-	protocol  uint            `json:"-"`
-	dialect   uint            `json:"-"`
-	tx        *sync.Mutex     `json:"-"`
-	manager   *Manager        `json:"-"`
-}
-
-func (c *Client) GetUserObject() *UserObject {
-	if c.NameSet {
-		return &UserObject{
-			ID:       c.ID,
-			Username: c.Name,
-			UUID:     c.UUID,
-		}
-	} else {
-		return &UserObject{
-			ID:   c.ID,
-			UUID: c.UUID,
+// Writer listens to the Sender channel and writes messages to the WebSocket.
+// It ensures only one goroutine ever writes to the connection at a time.
+func (c *Client) Writer() {
+	defer c.Conn.Close()
+	for p := range c.writer {
+		log.Printf("%s 🢀  %v", c.GiveName(), string(p))
+		if err := c.Conn.WriteMessage(websocket.TextMessage, p); err != nil {
+			log.Printf("Error writing to client %s: %v", c.ID, err)
+			break
 		}
 	}
 }
 
-func (client *Client) UpgradeDialect(newdialect uint) {
-	if newdialect > client.dialect {
-
-		var basestring string
-		if client.dialect == Dialect_Undefined {
-			basestring = fmt.Sprintf("%s 𝐢 Detected ", client.GiveName())
+func (c *Client) Reader() {
+reader:
+	for {
+		if msg_type, packet, err := c.Conn.ReadMessage(); err != nil {
+			log.Printf("%s %v", c.GiveName(), err)
+			if websocket.IsCloseError(err) || websocket.IsUnexpectedCloseError(err) {
+				c.exit <- true
+				break reader
+			}
 		} else {
-			basestring = fmt.Sprintf("%s 𝐢 Upgraded to ", client.GiveName())
+			switch msg_type {
+			case websocket.TextMessage:
+				switch p := c.Protocol.(type) {
+				case nil:
+					if p, ok := c.DetectAndReadProtocol(packet); !ok {
+						c.writer <- []byte("failed to detect protocol")
+						c.exit <- true
+						break reader
+					} else {
+						c.Protocol = p
+					}
+				case *CL4_or_CL3:
+					p.Reader(c, packet)
+				case *Scratch_Handler:
+					p.Reader(c, packet)
+				case *CL2:
+					p.Reader(c, packet)
+				default:
+					panic("unhandled protocol")
+				}
+
+			default:
+				panic("unhandled message type")
+			}
 		}
 
-		client.dialect = newdialect
-		switch client.dialect {
-		case Dialect_CL3_0_1_5:
-			log.Println(basestring + "CL3 dialect v0.1.5")
-		case Dialect_CL3_0_1_7:
-			log.Println(basestring + "CL3 dialect v0.1.7")
-		case Dialect_CL4_0_1_8:
-			log.Println(basestring + "CL4 dialect v0.1.8")
-		case Dialect_CL4_0_1_9:
-			log.Println(basestring + "CL4 dialect v0.1.9")
-		case Dialect_CL4_0_2_0:
-			log.Println(basestring + "CL4 dialect v0.2.0")
+		// Stop loop if c.exit is closed
+		select {
+		case <-c.exit:
+			break reader
+		default:
 		}
 	}
 }
 
 func (c *Client) GiveName() string {
-	if !c.NameSet {
+	// If the username is nil or empty, return just the Snowflake ID
+	if c.Username == nil || c.Username == "" {
 		return fmt.Sprintf("[%s]", c.ID)
-	} else {
-		return fmt.Sprintf("[%v (%s)]", c.Name, c.ID)
 	}
+	// If they have a username, include it with the Snowflake ID
+	return fmt.Sprintf("[%v (%s)]", c.Username, c.ID)
 }
 
-func (c *Client) SetName(name any) {
-	c.Name = name
-	c.NameSet = true
-	log.Printf("[%s] ▶ [%v (%s)]", c.ID, name, c.ID)
-}
+func (c *Client) DetectAndReadProtocol(data []byte) (Protocol, bool) {
+	var wg sync.WaitGroup
+	resultCh := make(chan Protocol, 1) // Buffered channel of size 1
 
-func (c *Client) UpdateHandshake(handshake bool) {
-	c.Handshake = handshake
-}
-
-func (c *Client) AllRooms() []*Room {
-	c.roomlock.Lock()
-	defer c.roomlock.Unlock()
-	var room_map []*Room
-	for _, room := range c.Rooms {
-		room_map = append(room_map, room)
+	detectors := []func(){
+		func() {
+			defer wg.Done()
+			p := New_CL4_or_CL3(c.Server)
+			if p.Reader(c, data) {
+				log.Printf("%s 𝐢 CL3 or CL4 protocol detected", c.GiveName())
+				c.Protocol = p
+				resultCh <- p
+			}
+		},
+		func() {
+			defer wg.Done()
+			p := New_Scratch(c.Server)
+			if p.Reader(c, data) {
+				log.Printf("%s 𝐢 Scratch protocol detected", c.GiveName())
+				c.Protocol = p
+				resultCh <- p
+			}
+		},
+		func() {
+			defer wg.Done()
+			p := New_CL2(c.Server)
+			if p.Reader(c, data) {
+				log.Printf("%s 𝐢 CL2 protocol detected", c.GiveName())
+				c.Protocol = p
+				resultCh <- p
+			}
+		},
 	}
-	return room_map
-}
 
-func (c *Client) JoinRoom(r *Room) {
-	r.lock.Lock()
-	r.Clients[c.ID] = c
-	r.lock.Unlock()
-
-	c.roomlock.Lock()
-	c.Rooms[r.Name] = r
-	c.roomlock.Unlock()
-
-	log.Printf("%s joined room %s", c.GiveName(), r.Name)
-}
-
-func (c *Client) LeaveRoom(r *Room) {
-	m := c.manager
-
-	r.lock.Lock()
-	delete(r.Clients, c.ID)
-	r.lock.Unlock()
-
-	c.roomlock.Lock()
-	delete(c.Rooms, r.Name)
-	c.roomlock.Unlock()
-
-	log.Printf("%s left room %s", c.GiveName(), r.Name)
-
-	// Destroy room if empty but never the default one
-	if r != m.DefaultRoom && len(r.Clients) == 0 {
-		log.Println("Destroying room", r.Name, "because it has been deserted")
-		m.DestroyRoom(r)
+	wg.Add(len(detectors))
+	for _, detector := range detectors {
+		go detector()
 	}
+
+	// Goroutine to wait for all detectors and close the channel
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	if p, ok := <-resultCh; ok {
+		return p, true
+	}
+
+	// No valid protocol detected
+	log.Println("No valid protocol detected")
+	return nil, false
 }
