@@ -2,11 +2,14 @@ package server
 
 import (
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/cloudlink-delta/duplex"
 	"github.com/goccy/go-json"
 )
+
+var queryRegex = regexp.MustCompile(`^([^.@]+)(?:\.([^@]+))?(?:@(.+))?$`)
 
 func (s *Server) ConfigureDelta(designation string) {
 	i := s.instance
@@ -78,34 +81,93 @@ func (s *Server) ConfigureDelta(designation string) {
 			return
 		}
 
-		// detect if this is a plain username or a username with a suffix
-		parts := strings.Split(query, "@")
 		log.Println("QUERY:", query)
-		log.Println("Parts:", parts)
 
-		if len(parts) == 1 {
-
-			// Resolve as our own
-			s.ResolvePeer(query, peer, packet)
-
-		} else {
-
-			// Unsupported query mode
+		matches := queryRegex.FindStringSubmatch(query)
+		if matches == nil {
 			peer.WriteBlocking(&duplex.TxPacket{
 				Packet: duplex.Packet{
 					Opcode:   "VIOLATION",
 					Listener: packet.Listener,
 					TTL:      1,
 				},
-				Payload: "Unsupported query mode",
+				Payload: "Invalid query format",
 			})
 			peer.Close()
+			return
 		}
 
+		username := matches[1]
+		bridgeName := matches[2]
+		targetDesignation := matches[3]
+
+		if targetDesignation != "" && targetDesignation != designation {
+			peer.WriteBlocking(&duplex.TxPacket{
+				Packet: duplex.Packet{
+					Opcode:   "VIOLATION",
+					Listener: packet.Listener,
+					TTL:      1,
+				},
+				Payload: "Unsupported query mode: designation mismatch",
+			})
+			peer.Close()
+			return
+		}
+
+		if bridgeName != "" {
+			expectedBridge := strings.Split(s.Self, "@")[0]
+			if bridgeName != expectedBridge && bridgeName != s.Self {
+				// Not meant for us
+				peer.Write(&duplex.TxPacket{
+					Packet: duplex.Packet{
+						Opcode:   "QUERY_ACK",
+						Listener: packet.Listener,
+						TTL:      1,
+					},
+					Payload: QueryAck{
+						Username: query,
+						Online:   false,
+					},
+				})
+				return
+			}
+		}
+
+		// Resolve as our own
+		s.ResolvePeer(username, peer, packet)
+
 	}, "discovery", "bridge")
+
+	// LINK is a compatibility command that joins a Delta client to a classic room(s).
+	i.Bind("LINK", func(*duplex.Peer, *duplex.RxPacket) {})
+
+	// UNLINK is a compatibility command that removes a Delta client from a classic room(s).
+	i.Bind("UNLINK", func(*duplex.Peer, *duplex.RxPacket) {})
 }
 
 func (i *Server) ResolvePeer(username string, peer *duplex.Peer, packet *duplex.RxPacket) {
+
+	designation := strings.Split(i.Self, "@")[1]
+	expectedBridge := strings.Split(i.Self, "@")[0]
+
+	// 1. Check if the query is asking for the bridge server itself
+	if username == expectedBridge || username == i.Self {
+		peer.Write(&duplex.TxPacket{
+			Packet: duplex.Packet{
+				Opcode:   "QUERY_ACK",
+				Listener: packet.Listener,
+				TTL:      1,
+			},
+			Payload: QueryAck{
+				Online:      true,
+				Username:    username,
+				Designation: designation,
+				InstanceID:  i.Self,
+				IsBridge:    true,
+			},
+		})
+		return
+	}
 
 	// Obtain lock
 	i.clientsmu.Lock()
@@ -134,13 +196,21 @@ func (i *Server) ResolvePeer(username string, peer *duplex.Peer, packet *duplex.
 		log.Printf("WARN: resolver found more than 1 client for a single query: %s", username)
 	}
 
+	var instanceID string
+	for client := range targets {
+		instanceID = client.UUID.String()
+		break
+	}
+
 	// found
 	response := &QueryAck{
-		Online:    true,
-		Username:  username,
-		IsLegacy:  true, // Always true if we're the Bridge server.
-		IsRelayed: true, // Always true if we're the Bridge server.
-		RelayPeer: i.Self,
+		Online:      true,
+		Username:    username, // {username}.bridge@{designation}
+		Designation: designation,
+		InstanceID:  instanceID,
+		IsLegacy:    true, // Always true if we're the Bridge server.
+		IsRelayed:   true, // Always true if we're the Bridge server.
+		RelayPeer:   i.Self,
 	}
 
 	peer.Write(&duplex.TxPacket{

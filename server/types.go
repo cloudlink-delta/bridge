@@ -191,11 +191,20 @@ func (p *CL2Packet) String() string {
 
 // QueryAck is a clone of the one present in the Discovery service. It is a response template to the "QUERY" opcode.
 type QueryAck struct {
-	Online    bool   `json:"online"`
-	Username  string `json:"username,omitempty"`
-	IsLegacy  bool   `json:"is_legacy,omitempty"`
-	IsRelayed bool   `json:"is_relayed,omitempty"`
-	RelayPeer string `json:"relay_peer,omitempty"`
+	Online        bool   `json:"online"`
+	Username      string `json:"username,omitempty"`
+	Designation   string `json:"designation,omitempty"`
+	InstanceID    string `json:"instance_id,omitempty"`
+	IsLobbyMember bool   `json:"is_lobby_member,omitempty"`
+	IsLobbyHost   bool   `json:"is_lobby_host,omitempty"`
+	IsInLobby     bool   `json:"is_in_lobby,omitempty"`
+	LobbyID       string `json:"lobby_id,omitempty"`
+	RTT           int64  `json:"rtt,omitempty"`
+	IsLegacy      bool   `json:"is_legacy,omitempty"`
+	IsRelayed     bool   `json:"is_relayed,omitempty"`
+	RelayPeer     string `json:"relay_peer,omitempty"`
+	IsBridge      bool   `json:"is_bridge,omitempty"`
+	IsDiscovery   bool   `json:"is_discovery,omitempty"`
 }
 
 type RoomKey string
