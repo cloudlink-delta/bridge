@@ -24,7 +24,7 @@ func New_CL4_or_CL3(parent *Server) Protocol {
 	}
 }
 
-func (s CL4_or_CL3) On_Disconnect(c *Client, rooms RoomKeys) { // (And Scratch_Handler)
+func (s CL4_or_CL3) On_Disconnect(c *ClassicClient, rooms RoomKeys) { // (And Scratch_Handler)
 	if c.Username == nil || c.Username == "" {
 		return
 	}
@@ -41,7 +41,7 @@ func (s CL4_or_CL3) On_Disconnect(c *Client, rooms RoomKeys) { // (And Scratch_H
 	}
 }
 
-func (s CL4_or_CL3) Reader(client *Client, data []byte) bool {
+func (s CL4_or_CL3) Reader(client *ClassicClient, data []byte) bool {
 	// Check if the data is even remotely usable
 	if !json.Valid(data) {
 		log.Println("CL4/CL3 Reader: Invalid JSON received")
@@ -77,7 +77,7 @@ func (s CL4_or_CL3) Reader(client *Client, data []byte) bool {
 }
 
 // Main opcode handler for the bridge server
-func (s CL4_or_CL3) Handler(client *Client, p *CL4_or_CL3_Packet) {
+func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 	log.Printf("%s 🢂  %v", client.GiveName(), p)
 
 	switch p.Command {
@@ -128,6 +128,8 @@ func (s CL4_or_CL3) Handler(client *Client, p *CL4_or_CL3_Packet) {
 				Value:   s.UserObject(client),
 				Rooms:   DEFAULT_ROOM,
 			}, client)
+
+			client.Server.AnnounceClassicJoin(client, nil)
 		}
 
 		s.Sync_Room_State(client, DEFAULT_ROOM)
@@ -287,6 +289,8 @@ func (s CL4_or_CL3) Handler(client *Client, p *CL4_or_CL3_Packet) {
 			s.Sync_Room_State(client, room)
 		}
 
+		client.Server.AnnounceClassicJoin(client, roomsToLink)
+
 		// If default isn't explicitly requested, kick them from it
 		if !hasDefault && s.Is_Client_In_Room(client, DEFAULT_ROOM) {
 			s.Unsubscribe(client, DEFAULT_ROOM)
@@ -296,6 +300,7 @@ func (s CL4_or_CL3) Handler(client *Client, p *CL4_or_CL3_Packet) {
 				Value:   s.UserObject(client),
 				Rooms:   DEFAULT_ROOM,
 			}, client)
+			client.Server.AnnounceClassicLeft(client, []RoomKey{DEFAULT_ROOM})
 		}
 
 		if p.Listener != nil {
@@ -328,6 +333,8 @@ func (s CL4_or_CL3) Handler(client *Client, p *CL4_or_CL3_Packet) {
 			}, client)
 		}
 
+		client.Server.AnnounceClassicLeft(client, roomsToUnlink)
+
 		// If they are in 0 rooms, force them back into default
 		if len(client.Rooms) == 0 {
 			s.Subscribe(client, DEFAULT_ROOM)
@@ -337,6 +344,7 @@ func (s CL4_or_CL3) Handler(client *Client, p *CL4_or_CL3_Packet) {
 			s.Unicast(client, &CL4_or_CL3_Packet{
 				Command: "ulist", Mode: "set", Value: s.Get_User_List(DEFAULT_ROOM), Rooms: DEFAULT_ROOM,
 			})
+			client.Server.AnnounceClassicJoin(client, []RoomKey{DEFAULT_ROOM})
 		}
 
 		if p.Listener != nil {
@@ -346,7 +354,7 @@ func (s CL4_or_CL3) Handler(client *Client, p *CL4_or_CL3_Packet) {
 }
 
 // Builds and unicasts a status code packet to a client
-func (s CL4_or_CL3) Send_Status_Code(client *Client, code StatusCode, listener any, details any, val any) {
+func (s CL4_or_CL3) Send_Status_Code(client *ClassicClient, code StatusCode, listener any, details any, val any) {
 	packet := &CL4_or_CL3_Packet{
 		Command:  "statuscode",
 		Code:     code.String(),
@@ -365,7 +373,7 @@ func (s CL4_or_CL3) Send_Status_Code(client *Client, code StatusCode, listener a
 }
 
 // Generates a spoofed server version string to fool the client's compatibility checker
-func (s CL4_or_CL3) Spoof_Server_Version(client *Client) string {
+func (s CL4_or_CL3) Spoof_Server_Version(client *ClassicClient) string {
 	switch client.dialect {
 	case Dialect_CL3_0_1_5:
 		return "0.1.5"
@@ -383,7 +391,7 @@ func (s CL4_or_CL3) Spoof_Server_Version(client *Client) string {
 }
 
 // Automatically determine the protocol version based on known first-packet behaviors
-func (s CL4_or_CL3) Derive_Dialect(p *CL4_or_CL3_Packet, c *Client) {
+func (s CL4_or_CL3) Derive_Dialect(p *CL4_or_CL3_Packet, c *ClassicClient) {
 	if p.Command == "handshake" {
 		if valMap, ok := p.Value.(map[string]any); ok {
 			_, langExists := valMap["language"]
@@ -406,7 +414,7 @@ func (s CL4_or_CL3) Derive_Dialect(p *CL4_or_CL3_Packet, c *Client) {
 }
 
 // Helper to automatically change the dialect version of the client based on known first-packet behaviors
-func (p *CL4_or_CL3) Upgrade_Dialect(c *Client, newdialect uint) {
+func (p *CL4_or_CL3) Upgrade_Dialect(c *ClassicClient, newdialect uint) {
 	if newdialect > c.dialect {
 
 		var basestring string
@@ -433,7 +441,7 @@ func (p *CL4_or_CL3) Upgrade_Dialect(c *Client, newdialect uint) {
 }
 
 // Sync_Room_State loops through a room's global variables and unicasts them to a client
-func (s CL4_or_CL3) Sync_Room_State(client *Client, room RoomKey) {
+func (s CL4_or_CL3) Sync_Room_State(client *ClassicClient, room RoomKey) {
 	s.roomsMu.RLock()
 	r, exists := s.RoomsMap[room]
 	s.roomsMu.RUnlock()

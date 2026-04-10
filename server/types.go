@@ -40,22 +40,27 @@ var (
 )
 
 type Room struct {
-	Clients    Targets
-	GlobalVars sync.Map // Protocol-agnostic global variable storage
+	DeltaClients   DeltaTargets
+	ClassicClients ClassicTargets
+	GlobalVars     sync.Map // Protocol-agnostic global variable storage
 }
-type Targets map[*Client]bool
-type Clients []*Client
+
+type DeltaTargets map[*duplex.Peer]bool
+type DeltaPeers []*duplex.Peer
+
+type ClassicTargets map[*ClassicClient]bool
+type ClassicClients []*ClassicClient
 
 type Protocol interface {
 
 	// Helper that runs automatically to clean up any remaining states for a detected protocol once a client disconnects
-	On_Disconnect(*Client, RoomKeys)
+	On_Disconnect(*ClassicClient, RoomKeys)
 
 	// Downgrades or transforms a packet's structure to match the target client's dialect.
-	Apply_Quirks(*Client, any) any
+	Apply_Quirks(*ClassicClient, any) any
 
 	// Lead-in function that detects a client's protocol and dialect, and processes the packet if a protocol match was made.
-	Reader(*Client, []byte) bool
+	Reader(*ClassicClient, []byte) bool
 }
 
 type Config struct {
@@ -85,18 +90,21 @@ type Config struct {
 }
 
 type Server struct {
-	Self         string
-	Close        chan bool
-	Done         chan bool
-	Config       *Config
-	instance     *duplex.Instance
-	Clients      Targets
-	clientsmu    sync.RWMutex
-	RoomsMap     map[RoomKey]*Room // Replaces clients map
-	roomsMu      sync.RWMutex      // Replaces clientsMu
-	snowflakeGen *snowflake.Node
-	App          *fiber.App
-	Address      string
+	Self               string
+	Close              chan bool
+	Done               chan bool
+	Config             *Config
+	instance           *duplex.Instance
+	DeltaClients       DeltaTargets
+	deltaclientsmu     sync.RWMutex
+	ClassicClients     ClassicTargets
+	classicclientsmu   sync.RWMutex
+	RoomsMap           map[RoomKey]*Room // Replaces clients map
+	roomsMu            sync.RWMutex      // Replaces clientsMu
+	snowflakeGen       *snowflake.Node
+	App                *fiber.App
+	Address            string
+	DeltaResolverCache map[*duplex.Peer]HelloArgs
 }
 
 // CL4_or_CL3 implements the Protocol interface
@@ -207,10 +215,15 @@ type QueryAck struct {
 	IsDiscovery   bool   `json:"is_discovery,omitempty"`
 }
 
+type HelloArgs struct {
+	Name        string `json:"name"`
+	Designation string `json:"designation"`
+}
+
 type RoomKey string
 type RoomKeys []RoomKey
 
-type Client struct {
+type ClassicClient struct {
 	Conn     *websocket.Conn
 	ID       snowflake.ID
 	UUID     uuid.UUID

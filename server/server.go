@@ -1,9 +1,11 @@
 package server
 
 import (
+	"fmt"
 	"log"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,14 +50,16 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	instance.IsBridge = true
 
 	server := &Server{
-		Self:         self,
-		Close:        make(chan bool),
-		Done:         make(chan bool),
-		Clients:      make(Targets),
-		Config:       server_config,
-		instance:     instance,
-		RoomsMap:     make(map[RoomKey]*Room),
-		snowflakeGen: node,
+		Self:               self,
+		Close:              make(chan bool),
+		Done:               make(chan bool),
+		DeltaClients:       make(DeltaTargets),
+		ClassicClients:     make(ClassicTargets),
+		DeltaResolverCache: make(map[*duplex.Peer]HelloArgs),
+		Config:             server_config,
+		instance:           instance,
+		RoomsMap:           make(map[RoomKey]*Room),
+		snowflakeGen:       node,
 		App: fiber.New(fiber.Config{
 			JSONEncoder: json.Marshal,
 			JSONDecoder: json.Unmarshal,
@@ -112,16 +116,16 @@ func (s *Server) Run() {
 	s.Done <- true
 }
 
-func (s *Server) Copy_Clients(room RoomKey) Clients {
+func (s *Server) Copy_Clients(room RoomKey) ClassicClients {
 	s.roomsMu.RLock()
 	defer s.roomsMu.RUnlock()
 	if r, ok := s.RoomsMap[room]; ok {
-		return slices.Collect(maps.Keys(r.Clients))
+		return slices.Collect(maps.Keys(r.ClassicClients))
 	}
 	return nil
 }
 
-func (s *Server) Unicast(c *Client, p any) {
+func (s *Server) Unicast(c *ClassicClient, p any) {
 	patched := c.Protocol.Apply_Quirks(c, p)
 	if patched == nil {
 		return
@@ -143,13 +147,13 @@ func (s *Server) Unicast(c *Client, p any) {
 	}
 }
 
-func (s *Server) Broadcast(room RoomKey, p any, exclude ...*Client) {
+func (s *Server) Broadcast(room RoomKey, p any, exclude ...*ClassicClient) {
 	targets := s.Copy_Clients(room)
 	if len(targets) == 0 {
 		return
 	}
 
-	targets = slices.DeleteFunc(targets, func(c *Client) bool {
+	targets = slices.DeleteFunc(targets, func(c *ClassicClient) bool {
 		return slices.Contains(exclude, c)
 	})
 
@@ -157,13 +161,13 @@ func (s *Server) Broadcast(room RoomKey, p any, exclude ...*Client) {
 	s.roomsMu.RLock()
 	defer s.roomsMu.RUnlock()
 	for _, client := range targets {
-		if r, ok := s.RoomsMap[room]; ok && r.Clients[client] {
+		if r, ok := s.RoomsMap[room]; ok && r.ClassicClients[client] {
 			s.Unicast(client, p)
 		}
 	}
 }
 
-func (s *Server) Multicast(room RoomKey, p any, targets Targets) {
+func (s *Server) Multicast(room RoomKey, p any, targets ClassicTargets) {
 	if len(targets) == 0 {
 		return
 	}
@@ -171,7 +175,7 @@ func (s *Server) Multicast(room RoomKey, p any, targets Targets) {
 	s.roomsMu.RLock()
 	defer s.roomsMu.RUnlock()
 	for client := range targets {
-		if r, ok := s.RoomsMap[room]; ok && r.Clients[client] {
+		if r, ok := s.RoomsMap[room]; ok && r.ClassicClients[client] {
 			s.Unicast(client, p)
 		}
 	}
@@ -194,9 +198,9 @@ func (s *Server) Run_Client(c *websocket.Conn) {
 	}
 
 	// Abort connection if the server is overloaded
-	s.clientsmu.RLock()
-	count := len(s.Clients)
-	s.clientsmu.RUnlock()
+	s.classicclientsmu.RLock()
+	count := len(s.ClassicClients)
+	s.classicclientsmu.RUnlock()
 
 	if count >= int(s.Config.Maximum_Clients) {
 		c.WriteMessage(websocket.TextMessage, []byte("This server is currently full. Please try again later."))
@@ -205,7 +209,7 @@ func (s *Server) Run_Client(c *websocket.Conn) {
 		return
 	}
 
-	client := &Client{
+	client := &ClassicClient{
 		Conn:   c,
 		ID:     s.snowflakeGen.Generate(),
 		UUID:   uuid.New(),
@@ -215,9 +219,9 @@ func (s *Server) Run_Client(c *websocket.Conn) {
 		Server: s,
 	}
 
-	s.clientsmu.Lock()
-	s.Clients[client] = true
-	s.clientsmu.Unlock()
+	s.classicclientsmu.Lock()
+	s.ClassicClients[client] = true
+	s.classicclientsmu.Unlock()
 
 	s.Subscribe(client, DEFAULT_ROOM)
 
@@ -228,7 +232,7 @@ func (s *Server) Run_Client(c *websocket.Conn) {
 	client.Reader()
 }
 
-func (s *Server) Destroy_Client(c *Client) {
+func (s *Server) Destroy_Client(c *ClassicClient) {
 
 	// Safely copy the rooms slice so we don't mutate it while iterating
 	c.room_mux.RLock()
@@ -252,9 +256,11 @@ func (s *Server) Destroy_Client(c *Client) {
 		c.Protocol.On_Disconnect(c, roomsToLeave)
 	}
 
-	s.clientsmu.Lock()
-	delete(s.Clients, c)
-	s.clientsmu.Unlock()
+	s.AnnounceClassicLeft(c, roomsToLeave)
+
+	s.classicclientsmu.Lock()
+	delete(s.ClassicClients, c)
+	s.classicclientsmu.Unlock()
 
 	close(c.writer)
 
@@ -268,7 +274,7 @@ func (s *Server) DoesRoomExist(room RoomKey) bool {
 	return exists
 }
 
-func (s *Server) Subscribe(client *Client, room RoomKey) {
+func (s *Server) Subscribe(client *ClassicClient, room RoomKey) {
 	s.roomsMu.Lock()
 	r, exists := s.RoomsMap[room]
 	if room == DEFAULT_ROOM {
@@ -276,11 +282,11 @@ func (s *Server) Subscribe(client *Client, room RoomKey) {
 	}
 	if !exists {
 		log.Printf("%s 🚪 Creating room %s", client.GiveName(), room)
-		r = &Room{Clients: make(Targets)}
+		r = &Room{ClassicClients: make(ClassicTargets)}
 		s.RoomsMap[room] = r
 	}
 
-	r.Clients[client] = true
+	r.ClassicClients[client] = true
 	s.roomsMu.Unlock()
 
 	client.room_mux.Lock()
@@ -292,11 +298,11 @@ func (s *Server) Subscribe(client *Client, room RoomKey) {
 	s.ReportActiveRooms(false)
 }
 
-func (s *Server) Unsubscribe(client *Client, room RoomKey) {
+func (s *Server) Unsubscribe(client *ClassicClient, room RoomKey) {
 	s.roomsMu.Lock()
 	if r, exists := s.RoomsMap[room]; exists {
-		delete(r.Clients, client)
-		if len(r.Clients) == 0 {
+		delete(r.ClassicClients, client)
+		if len(r.ClassicClients) == 0 {
 			delete(s.RoomsMap, room)
 			log.Printf("%s 🚪 Destroying vacant room %s", client.GiveName(), room)
 		}
@@ -327,9 +333,9 @@ func (s *Server) ReportActiveRooms(silent bool) int {
 }
 
 func (s *Server) ReportActiveConnections(silent bool) int {
-	s.clientsmu.RLock()
-	active_connections := len(s.Clients)
-	s.clientsmu.RUnlock()
+	s.classicclientsmu.RLock()
+	active_connections := len(s.ClassicClients)
+	s.classicclientsmu.RUnlock()
 	if !silent {
 		log.Printf("🔌 There are %v connection(s) active.", active_connections)
 	}
@@ -345,7 +351,7 @@ func (s *Server) DisplayStatus() {
 // Decreases the projected total by 1 if the client is the only connected peer in the default room.
 // This function assumes that if granted, the client joins the n allocated rooms
 // and frees the default room from memory.
-func (s *Server) CanAllocateNRooms(c *Client, n int) bool {
+func (s *Server) CanAllocateNRooms(c *ClassicClient, n int) bool {
 	decrement_is_only_one_in_default := func() int {
 		s.roomsMu.RLock()
 		default_room, ok := s.RoomsMap[DEFAULT_ROOM]
@@ -359,7 +365,7 @@ func (s *Server) CanAllocateNRooms(c *Client, n int) bool {
 
 		// Allow the decrement since the peer is the only one in the room,
 		// joining the new room would render the default empty and eligible for GC.
-		if len(default_room.Clients) == 1 && default_room.Clients[c] {
+		if len(default_room.ClassicClients) == 1 && default_room.ClassicClients[c] {
 			return -1
 		}
 
@@ -371,4 +377,162 @@ func (s *Server) CanAllocateNRooms(c *Client, n int) bool {
 
 	// Projected rooms must be LESS THAN OR EQUAL TO the maximum limit
 	return active_rooms+n+decrement_is_only_one_in_default <= int(s.Config.Maximum_Rooms)
+}
+
+func (s *Server) SubscribeDelta(peer *duplex.Peer, room RoomKey) {
+	s.roomsMu.Lock()
+	r, exists := s.RoomsMap[room]
+	if !exists {
+		r = &Room{ClassicClients: make(ClassicTargets), DeltaClients: make(DeltaTargets)}
+		s.RoomsMap[room] = r
+	}
+	if r.DeltaClients == nil {
+		r.DeltaClients = make(DeltaTargets)
+	}
+	r.DeltaClients[peer] = true
+	s.roomsMu.Unlock()
+
+	peer.Lock.Lock()
+	defer peer.Lock.Unlock()
+	if peer.KeyStore == nil {
+		peer.KeyStore = make(map[string]any)
+	}
+	rooms, _ := peer.KeyStore["classic_rooms"].([]RoomKey)
+	if !slices.Contains(rooms, room) {
+		peer.KeyStore["classic_rooms"] = append(rooms, room)
+	}
+}
+
+func (s *Server) UnsubscribeDelta(peer *duplex.Peer, room RoomKey) {
+	s.roomsMu.Lock()
+	if r, exists := s.RoomsMap[room]; exists {
+		if r.DeltaClients != nil {
+			delete(r.DeltaClients, peer)
+		}
+		if len(r.ClassicClients) == 0 && len(r.DeltaClients) == 0 {
+			delete(s.RoomsMap, room)
+		}
+	}
+	s.roomsMu.Unlock()
+
+	peer.Lock.Lock()
+	defer peer.Lock.Unlock()
+	if peer.KeyStore != nil {
+		rooms, _ := peer.KeyStore["classic_rooms"].([]RoomKey)
+		peer.KeyStore["classic_rooms"] = slices.DeleteFunc(rooms, func(rk RoomKey) bool {
+			return rk == room
+		})
+	}
+}
+
+func (s *Server) AnnounceClassicJoin(client *ClassicClient, rooms []RoomKey) {
+	if client.Username == nil || client.Username == "" {
+		return
+	}
+
+	if rooms == nil {
+		client.room_mux.RLock()
+		rooms = make([]RoomKey, len(client.Rooms))
+		copy(rooms, client.Rooms)
+		client.room_mux.RUnlock()
+	}
+
+	designation := strings.Split(s.Self, "@")[1]
+
+	payload := QueryAck{
+		Online:      true,
+		Username:    fmt.Sprintf("%v", client.Username),
+		Designation: designation,
+		InstanceID:  client.UUID.String(),
+		IsLegacy:    true,
+		IsRelayed:   true,
+		RelayPeer:   s.Self,
+	}
+
+	uniquePeers := make(map[*duplex.Peer]bool)
+	s.roomsMu.RLock()
+	for _, room := range rooms {
+		if r, exists := s.RoomsMap[room]; exists {
+			for peer := range r.DeltaClients {
+				uniquePeers[peer] = true
+			}
+		}
+	}
+	s.roomsMu.RUnlock()
+
+	for peer := range uniquePeers {
+		peer.Write(&duplex.TxPacket{
+			Packet: duplex.Packet{
+				Opcode: "CLASSIC_JOIN",
+				TTL:    1,
+			},
+			Payload: payload,
+		})
+	}
+}
+
+func (s *Server) AnnounceClassicLeft(client *ClassicClient, roomsToLeave []RoomKey) {
+	if client.Username == nil || client.Username == "" {
+		return
+	}
+
+	if roomsToLeave == nil {
+		client.room_mux.RLock()
+		roomsToLeave = make([]RoomKey, len(client.Rooms))
+		copy(roomsToLeave, client.Rooms)
+		client.room_mux.RUnlock()
+	}
+
+	client.room_mux.RLock()
+	remainingRooms := make([]RoomKey, len(client.Rooms))
+	copy(remainingRooms, client.Rooms)
+	client.room_mux.RUnlock()
+
+	retainedPeers := make(map[*duplex.Peer]bool)
+	s.roomsMu.RLock()
+	for _, room := range remainingRooms {
+		if r, exists := s.RoomsMap[room]; exists {
+			for peer := range r.DeltaClients {
+				retainedPeers[peer] = true
+			}
+		}
+	}
+
+	notifyPeers := make(map[*duplex.Peer]bool)
+	for _, room := range roomsToLeave {
+		if r, exists := s.RoomsMap[room]; exists {
+			for peer := range r.DeltaClients {
+				if !retainedPeers[peer] {
+					notifyPeers[peer] = true
+				}
+			}
+		}
+	}
+	s.roomsMu.RUnlock()
+
+	if len(notifyPeers) == 0 {
+		return
+	}
+
+	designation := strings.Split(s.Self, "@")[1]
+
+	payload := QueryAck{
+		Online:      false,
+		Username:    fmt.Sprintf("%v", client.Username),
+		Designation: designation,
+		InstanceID:  client.UUID.String(),
+		IsLegacy:    true,
+		IsRelayed:   true,
+		RelayPeer:   s.Self,
+	}
+
+	for peer := range notifyPeers {
+		peer.Write(&duplex.TxPacket{
+			Packet: duplex.Packet{
+				Opcode: "CLASSIC_LEFT",
+				TTL:    1,
+			},
+			Payload: payload,
+		})
+	}
 }

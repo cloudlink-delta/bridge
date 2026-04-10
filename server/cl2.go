@@ -20,14 +20,14 @@ type cl2Parser struct {
 type CL2 struct {
 	*Server
 	parsers []cl2Parser
-	links   map[*Client]string // Stores the CL2 "Soft Link"
-	linksMu sync.RWMutex       // Mutex for thread-safe map access
+	links   map[*ClassicClient]string // Stores the CL2 "Soft Link"
+	linksMu sync.RWMutex              // Mutex for thread-safe map access
 }
 
 func New_CL2(parent *Server) Protocol {
 	return &CL2{
 		Server: parent,
-		links:  make(map[*Client]string),
+		links:  make(map[*ClassicClient]string),
 		parsers: []cl2Parser{
 			{
 				name: "linked_p_vars",
@@ -73,7 +73,7 @@ func New_CL2(parent *Server) Protocol {
 	}
 }
 
-func (s *CL2) On_Disconnect(c *Client, rooms RoomKeys) {
+func (s *CL2) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
 	s.linksMu.Lock()
 	delete(s.links, c)
 	s.linksMu.Unlock()
@@ -94,7 +94,7 @@ func (s *CL2) On_Disconnect(c *Client, rooms RoomKeys) {
 	}
 }
 
-func (s *CL2) Reader(client *Client, data []byte) bool {
+func (s *CL2) Reader(client *ClassicClient, data []byte) bool {
 	message := string(data)
 	if !strings.HasPrefix(message, "<%") {
 		return false
@@ -153,7 +153,7 @@ func (s *CL2) Reader(client *Client, data []byte) bool {
 	return true
 }
 
-func (s *CL2) Handler(client *Client, p *CL2Packet) {
+func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 	log.Printf("%s 🢂 <%s>", client.GiveName(), p.Command)
 
 	if client.dialect == Dialect_Undefined {
@@ -205,6 +205,8 @@ func (s *CL2) Handler(client *Client, p *CL2Packet) {
 			Value:   s.UserObject(client),
 			Rooms:   DEFAULT_ROOM,
 		}, client)
+
+		client.Server.AnnounceClassicJoin(client, nil)
 
 	case "rf":
 		s.Unicast(client, &CL4_or_CL3_Packet{
@@ -310,7 +312,7 @@ func (s *CL2) Handler(client *Client, p *CL2Packet) {
 	}
 }
 
-func (s *CL2) Upgrade_Dialect(c *Client, newdialect uint) {
+func (s *CL2) Upgrade_Dialect(c *ClassicClient, newdialect uint) {
 	if newdialect > c.dialect {
 		var basestring string
 		if c.dialect == Dialect_Undefined {

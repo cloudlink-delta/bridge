@@ -24,7 +24,7 @@ func New_Scratch(parent *Server) Protocol {
 	}
 }
 
-func (s Scratch_Handler) On_Disconnect(c *Client, rooms RoomKeys) {
+func (s Scratch_Handler) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
 	if c.Username == nil || c.Username == "" {
 		return
 	}
@@ -41,7 +41,7 @@ func (s Scratch_Handler) On_Disconnect(c *Client, rooms RoomKeys) {
 	}
 }
 
-func (s Scratch_Handler) Reader(client *Client, data []byte) bool {
+func (s Scratch_Handler) Reader(client *ClassicClient, data []byte) bool {
 	if !json.Valid(data) {
 		return false
 	}
@@ -61,7 +61,7 @@ func (s Scratch_Handler) Reader(client *Client, data []byte) bool {
 	return true
 }
 
-func (s Scratch_Handler) Handler(client *Client, p *ScratchPacket) {
+func (s Scratch_Handler) Handler(client *ClassicClient, p *ScratchPacket) {
 	log.Printf("%s 🢂  %s", client.GiveName(), p)
 
 	switch p.Method {
@@ -95,6 +95,8 @@ func (s Scratch_Handler) Handler(client *Client, p *ScratchPacket) {
 		// The Scratch protocol cannot use differing room contexts
 		s.Unsubscribe(client, DEFAULT_ROOM)
 		s.Subscribe(client, projectRoom)
+
+		client.Server.AnnounceClassicJoin(client, nil)
 
 		// Sync Shared Variables!
 		s.roomsMu.RLock()

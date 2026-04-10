@@ -8,7 +8,7 @@ import (
 	"github.com/goccy/go-json"
 )
 
-func (s *Scratch_Handler) Apply_Quirks(_ *Client, p any) any {
+func (s *Scratch_Handler) Apply_Quirks(_ *ClassicClient, p any) any {
 	switch packet := p.(type) {
 	case *ScratchPacket:
 		// Native Scratch packets pass through natively
@@ -45,7 +45,7 @@ func (s *Scratch_Handler) Apply_Quirks(_ *Client, p any) any {
 	}
 }
 
-func (s *CL2) Apply_Quirks(c *Client, p any) any {
+func (s *CL2) Apply_Quirks(c *ClassicClient, p any) any {
 	var reply CL2Packet_TxReply
 
 	switch original := p.(type) {
@@ -159,7 +159,7 @@ func (s *CL2) Apply_Quirks(c *Client, p any) any {
 	return reply
 }
 
-func (s *CL4_or_CL3) Apply_Quirks(c *Client, p any) any {
+func (s *CL4_or_CL3) Apply_Quirks(c *ClassicClient, p any) any {
 	var packet *CL4_or_CL3_Packet
 
 	switch original_packet := p.(type) {

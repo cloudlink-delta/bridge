@@ -14,7 +14,7 @@ func (CL4_or_CL3) isTypeDeclaration(val any) bool {
 }
 
 // Returns a formatted user object.
-func (s *Server) UserObject(c *Client) *CL4_UserObject {
+func (s *Server) UserObject(c *ClassicClient) *CL4_UserObject {
 	return &CL4_UserObject{ID: c.ID.String(), UUID: c.UUID.String(), Username: c.Username}
 }
 
@@ -32,8 +32,8 @@ func (s *Server) Get_User_List(room RoomKey) []*CL4_UserObject {
 }
 
 // Get_Clients resolves a CloudLink ID/Username (or an array of them) to a map of clients for Multicasting
-func (s *Server) Get_Clients(room RoomKey, targetID any) Targets {
-	targets := make(Targets)
+func (s *Server) Get_Clients(room RoomKey, targetID any) ClassicTargets {
+	targets := make(ClassicTargets)
 	clients := s.Copy_Clients(room)
 
 	// Convert targetID to a slice so we can uniformly process 1 or multiple targets
@@ -57,7 +57,7 @@ func (s *Server) Get_Clients(room RoomKey, targetID any) Targets {
 }
 
 // Get_Target_Rooms converts the dynamic Rooms field into a slice of strings, defaulting to the client's current rooms.
-func (s *Server) Get_Target_Rooms(client *Client, roomsContext any) RoomKeys {
+func (s *Server) Get_Target_Rooms(client *ClassicClient, roomsContext any) RoomKeys {
 	if roomsContext == nil || roomsContext == "" {
 		// If the client's rooms list is empty, default to DEFAULT_ROOM defensively
 		if len(client.Rooms) == 0 {
@@ -80,7 +80,7 @@ func (s *Server) Get_Target_Rooms(client *Client, roomsContext any) RoomKeys {
 }
 
 // Is_Client_In_Room checks if the client is currently subscribed to a specific room
-func (s *Server) Is_Client_In_Room(client *Client, room RoomKey) bool {
+func (s *Server) Is_Client_In_Room(client *ClassicClient, room RoomKey) bool {
 	clientsInRoom := s.Copy_Clients(room)
 	for _, c := range clientsInRoom {
 		if c.UUID == client.UUID {

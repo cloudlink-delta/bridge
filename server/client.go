@@ -10,7 +10,7 @@ import (
 
 // Writer listens to the Sender channel and writes messages to the WebSocket.
 // It ensures only one goroutine ever writes to the connection at a time.
-func (c *Client) Writer() {
+func (c *ClassicClient) Writer() {
 	defer c.Conn.Close()
 	for p := range c.writer {
 		log.Printf("%s 🢀  %v", c.GiveName(), string(p))
@@ -21,7 +21,7 @@ func (c *Client) Writer() {
 	}
 }
 
-func (c *Client) Reader() {
+func (c *ClassicClient) Reader() {
 reader:
 	for {
 		if msg_type, packet, err := c.Conn.ReadMessage(); err != nil {
@@ -66,7 +66,7 @@ reader:
 	}
 }
 
-func (c *Client) GiveName() string {
+func (c *ClassicClient) GiveName() string {
 	// If the username is nil or empty, return just the Snowflake ID
 	if c.Username == nil || c.Username == "" {
 		return fmt.Sprintf("[%s]", c.ID)
@@ -75,7 +75,7 @@ func (c *Client) GiveName() string {
 	return fmt.Sprintf("[%v (%s)]", c.Username, c.ID)
 }
 
-func (c *Client) DetectAndReadProtocol(data []byte) (Protocol, bool) {
+func (c *ClassicClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
 	var wg sync.WaitGroup
 	resultCh := make(chan Protocol, 1) // Buffered channel of size 1
 
