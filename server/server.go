@@ -41,11 +41,14 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		server_config.Address = ":3000"
 	}
 
+	self := "bridge@" + designation
+
 	// Create instance and bridge manager
-	instance := duplex.New("bridge@"+designation, duplex_config)
+	instance := duplex.New(self, duplex_config)
 	instance.IsBridge = true
 
 	server := &Server{
+		Self:         self,
 		Close:        make(chan bool),
 		Done:         make(chan bool),
 		Clients:      make(Targets),
@@ -59,7 +62,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		}),
 	}
 
-	// Configure bridge websocket
+	// Configure CL2 / CL3 / CL4 / Scratch CloudVars Gateway
 	server.App.Use("*", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true)
@@ -72,36 +75,8 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		server.Run_Client(c)
 	}))
 
-	// Configure instance callbacks
-	instance.OnCreate = func() {
-		// Attempt to connect to the discovery server
-		log.Printf("Attempting to connect to discovery server (discovery@%s)...", designation)
-		instance.Connect("discovery@" + designation)
-	}
-
-	instance.OnDiscoveryConnected = func(peer *duplex.Peer) {
-		log.Printf("Discovery services connected as %s", peer.GetPeerID())
-
-		reply := peer.WaitForMatchedPacket("AUTO_REGISTER", "VIOLATION")
-		switch reply.Opcode {
-		case "AUTO_REGISTER":
-			log.Printf("Automatically registered on %s successfully!", peer.GetPeerID())
-		case "VIOLATION":
-			// The protocol mandates that VIOLATION messages have a string payload. This should never panic unless something's very wrong.
-			var message string
-			if err := json.Unmarshal(reply.Payload, &message); err != nil {
-				panic(err)
-			}
-			log.Printf("Failed to auto-register on %s: %v", peer.GetPeerID(), message)
-		}
-	}
-
-	// Stubs
-	instance.AfterNegotiation = func(peer *duplex.Peer) {}
-	instance.OnOpen = func(peer *duplex.Peer) {}
-	instance.OnClose = func(peer *duplex.Peer) {}
-	instance.OnBridgeConnected = func(peer *duplex.Peer) {}
-	instance.OnRelayConnected = func(peer *duplex.Peer) {}
+	// Configure Delta Peer
+	server.ConfigureDelta(designation)
 
 	return server
 }

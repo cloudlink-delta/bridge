@@ -85,6 +85,7 @@ type Config struct {
 }
 
 type Server struct {
+	Self         string
 	Close        chan bool
 	Done         chan bool
 	Config       *Config
@@ -110,6 +111,7 @@ type CL4_UserObject struct {
 	Username any    `json:"username,omitempty"`
 }
 
+// CL4_or_CL3_Packet represents a CloudLink 4/3 packet. This is the packet format that the bridge's WebSocket gateway natively understands.
 type CL4_or_CL3_Packet struct {
 	Command   string `json:"cmd" jsonschema:"required"`
 	Name      any    `json:"name,omitempty"`
@@ -134,6 +136,7 @@ func (p *CL4_or_CL3_Packet) String() string {
 	return string(b)
 }
 
+// ScratchPacket represents a Cloud Variable protocol command.
 type ScratchPacket struct {
 	Method    string `json:"method" jsonschema:"required"`
 	ProjectID string `json:"project_id,omitempty"`
@@ -184,6 +187,15 @@ func (p *CL2Packet) String() string {
 		panic(err)
 	}
 	return string(b)
+}
+
+// QueryAck is a clone of the one present in the Discovery service. It is a response template to the "QUERY" opcode.
+type QueryAck struct {
+	Online    bool   `json:"online"`
+	Username  string `json:"username,omitempty"`
+	IsLegacy  bool   `json:"is_legacy,omitempty"`
+	IsRelayed bool   `json:"is_relayed,omitempty"`
+	RelayPeer string `json:"relay_peer,omitempty"`
 }
 
 type RoomKey string
