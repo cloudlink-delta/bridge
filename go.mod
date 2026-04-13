@@ -7,13 +7,16 @@ replace (
 	github.com/cloudlink-delta/duplex => ../duplex
 )
 
-require github.com/cloudlink-delta/bridge/server v0.0.0-00010101000000-000000000000
+require (
+	github.com/cloudlink-delta/bridge/server v0.0.0-00010101000000-000000000000
+	github.com/cloudlink-delta/duplex v0.0.0-00010101000000-000000000000
+	github.com/pion/webrtc/v3 v3.3.6
+)
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9 // indirect
-	github.com/cloudlink-delta/duplex v0.0.0-00010101000000-000000000000 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fasthttp/websocket v1.5.8 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
@@ -47,7 +50,6 @@ require (
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/transport/v2 v2.2.10 // indirect
 	github.com/pion/turn/v2 v2.1.6 // indirect
-	github.com/pion/webrtc/v3 v3.3.6 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20240303185622-093b76447511 // indirect
