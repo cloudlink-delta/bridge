@@ -5,10 +5,11 @@ import (
 	"log"
 	"strings"
 
+	"github.com/cloudlink-delta/duplex"
 	"github.com/goccy/go-json"
 )
 
-func (s *Scratch_Handler) Apply_Quirks(_ *ClassicClient, p any) any {
+func (s *Scratch_Handler) Apply_Quirks(c *BridgeClient, p any) any {
 	switch packet := p.(type) {
 	case *ScratchPacket:
 		// Native Scratch packets pass through natively
@@ -27,7 +28,7 @@ func (s *Scratch_Handler) Apply_Quirks(_ *ClassicClient, p any) any {
 		log.Println("⁉️  CL2 -> Scratch translation not present")
 		return nil
 
-	case *CL4_or_CL3_Packet:
+	case *Common_Packet:
 		// Cross-protocol translation: CL4/CL3 -> Scratch
 		if packet.Command == "gvar" {
 			return &ScratchPacket{
@@ -45,11 +46,11 @@ func (s *Scratch_Handler) Apply_Quirks(_ *ClassicClient, p any) any {
 	}
 }
 
-func (s *CL2) Apply_Quirks(c *ClassicClient, p any) any {
+func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 	var reply CL2Packet_TxReply
 
 	switch original := p.(type) {
-	case *CL4_or_CL3_Packet:
+	case *Common_Packet:
 		switch original.Command {
 		case "server_version":
 			reply.Type = "direct"
@@ -159,11 +160,11 @@ func (s *CL2) Apply_Quirks(c *ClassicClient, p any) any {
 	return reply
 }
 
-func (s *CL4_or_CL3) Apply_Quirks(c *ClassicClient, p any) any {
-	var packet *CL4_or_CL3_Packet
+func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
+	var packet *Common_Packet
 
 	switch original_packet := p.(type) {
-	case *CL4_or_CL3_Packet:
+	case *Common_Packet:
 		// Create a shallow copy of the packet so we don't mutate the
 		// broadcasted packet reference for other clients.
 		clone := *original_packet
@@ -179,7 +180,7 @@ func (s *CL4_or_CL3) Apply_Quirks(c *ClassicClient, p any) any {
 	case *ScratchPacket:
 		// Cross-protocol translation: Scratch -> CL4/CL3
 		if original_packet.Method == "set" || original_packet.Method == "create" {
-			packet = &CL4_or_CL3_Packet{
+			packet = &Common_Packet{
 				Command: "gvar",
 				Name:    original_packet.Name,
 				Value:   original_packet.Value,
@@ -341,4 +342,149 @@ func (s *CL4_or_CL3) Apply_Quirks(c *ClassicClient, p any) any {
 		}
 	}
 	return packet
+}
+
+func (d *CLDelta) Apply_Quirks(c *BridgeClient, p any) any {
+	if c.Peer == nil {
+		return nil
+	}
+
+	switch packet := p.(type) {
+	case *Common_Packet:
+		originStr := d.Server.Self
+		if originObj, ok := packet.Origin.(*CL4_UserObject); ok && originObj != nil {
+			if originObj.Username != nil && originObj.Username != "" {
+				originStr = fmt.Sprintf("%v", originObj.Username)
+			}
+		}
+
+		switch packet.Command {
+		case "gmsg":
+			c.Peer.Write(&duplex.TxPacket{
+				Packet: duplex.Packet{
+					Opcode: "G_MSG",
+					Origin: originStr,
+					TTL:    1,
+				},
+				Payload: packet.Value,
+			})
+		case "pmsg":
+			c.Peer.Write(&duplex.TxPacket{
+				Packet: duplex.Packet{
+					Opcode: "P_MSG",
+					Origin: originStr,
+					TTL:    1,
+				},
+				Payload: packet.Value,
+			})
+		case "gvar":
+			c.Peer.Write(&duplex.TxPacket{
+				Packet: duplex.Packet{
+					Opcode: "G_VAR",
+					Origin: originStr,
+					Id:     fmt.Sprintf("%v", packet.Name),
+					TTL:    1,
+				},
+				Payload: packet.Value,
+			})
+		case "pvar":
+			c.Peer.Write(&duplex.TxPacket{
+				Packet: duplex.Packet{
+					Opcode: "P_VAR",
+					Origin: originStr,
+					Id:     fmt.Sprintf("%v", packet.Name),
+					TTL:    1,
+				},
+				Payload: packet.Value,
+			})
+		case "ulist":
+			// Get the room key safely
+			rooms, ok := packet.Rooms.(RoomKey)
+			if !ok {
+				if roomStr, ok := packet.Rooms.(string); ok {
+					rooms = RoomKey(roomStr)
+				} else {
+					return nil // Cannot determine room
+				}
+			}
+
+			// Check classic clients to determine legacy status
+			classicUUIDs := make(map[string]bool)
+			d.Server.classicclientsmu.RLock()
+			for bc := range d.Server.ClassicClients {
+				classicUUIDs[bc.UUID] = true
+			}
+			d.Server.classicclientsmu.RUnlock()
+
+			designation := strings.Split(d.Server.Self, "@")[1]
+			users := make([]QueryAck, 0)
+
+			switch packet.Mode {
+			case "set":
+				if userList, ok := packet.Value.([]*CL4_UserObject); ok {
+					for _, u := range userList {
+						if u.Username == nil || u.Username == "" || u.UUID == c.UUID {
+							continue
+						}
+						if !classicUUIDs[u.UUID] {
+							continue
+						}
+
+						ack := QueryAck{Online: true, Username: fmt.Sprintf("%v", u.Username), Designation: designation, InstanceID: u.UUID, IsLegacy: true, IsRelayed: true, RelayPeer: d.Server.Self}
+						users = append(users, ack)
+					}
+				}
+			case "add":
+				if u, ok := packet.Value.(*CL4_UserObject); ok {
+					if u.Username == nil || u.Username == "" || u.UUID == c.UUID {
+						break
+					}
+					if !classicUUIDs[u.UUID] {
+						break
+					}
+					ack := QueryAck{Online: true, Username: fmt.Sprintf("%v", u.Username), Designation: designation, InstanceID: u.UUID, IsLegacy: true, IsRelayed: true, RelayPeer: d.Server.Self}
+					users = append(users, ack)
+				}
+			case "remove":
+				if u, ok := packet.Value.(*CL4_UserObject); ok {
+					if u.Username == nil || u.Username == "" || u.UUID == c.UUID {
+						break
+					}
+					if !classicUUIDs[u.UUID] {
+						break
+					}
+					ack := QueryAck{Online: false, Username: fmt.Sprintf("%v", u.Username), Designation: designation, InstanceID: u.UUID, IsLegacy: true, IsRelayed: true, RelayPeer: d.Server.Self}
+					users = append(users, ack)
+				}
+			}
+
+			if len(users) > 0 || packet.Mode == "set" {
+				c.Peer.Write(&duplex.TxPacket{
+					Packet:  duplex.Packet{Opcode: "CLASSIC_ULIST", TTL: 1},
+					Payload: map[string]any{"mode": packet.Mode, "users": users, "rooms": rooms},
+				})
+			}
+		}
+
+	case *CL2Packet:
+		// CL2 Packets are handled natively by the CL2 protocol handler and converted to Common_Packet internally
+		// This block is safely dropped.
+		return nil
+
+	case *ScratchPacket:
+		switch packet.Method {
+		case "set", "create":
+			c.Peer.Write(&duplex.TxPacket{
+				Packet: duplex.Packet{
+					Opcode: "G_VAR",
+					Origin: d.Server.Self,
+					Id:     fmt.Sprintf("%v", packet.Name),
+					TTL:    1,
+				},
+				Payload: packet.Value,
+			})
+		}
+	}
+
+	return nil
 }

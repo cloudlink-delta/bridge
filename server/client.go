@@ -10,7 +10,7 @@ import (
 
 // Writer listens to the Sender channel and writes messages to the WebSocket.
 // It ensures only one goroutine ever writes to the connection at a time.
-func (c *ClassicClient) Writer() {
+func (c *BridgeClient) Writer() {
 	defer c.Conn.Close()
 	for p := range c.writer {
 		log.Printf("%s 🢀  %v", c.GiveName(), string(p))
@@ -21,7 +21,7 @@ func (c *ClassicClient) Writer() {
 	}
 }
 
-func (c *ClassicClient) Reader() {
+func (c *BridgeClient) Reader() {
 reader:
 	for {
 		if msg_type, packet, err := c.Conn.ReadMessage(); err != nil {
@@ -66,16 +66,16 @@ reader:
 	}
 }
 
-func (c *ClassicClient) GiveName() string {
-	// If the username is nil or empty, return just the Snowflake ID
+func (c *BridgeClient) GiveName() string {
+	// If the username is nil or empty, return just the UUID
 	if c.Username == nil || c.Username == "" {
-		return fmt.Sprintf("[%s]", c.ID)
+		return fmt.Sprintf("[%s]", c.UUID)
 	}
-	// If they have a username, include it with the Snowflake ID
-	return fmt.Sprintf("[%v (%s)]", c.Username, c.ID)
+	// If they have a username, include it with the UUID
+	return fmt.Sprintf("[%v (%s)]", c.Username, c.UUID)
 }
 
-func (c *ClassicClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
+func (c *BridgeClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
 	var wg sync.WaitGroup
 	resultCh := make(chan Protocol, 1) // Buffered channel of size 1
 

@@ -8,7 +8,6 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/kaptinlin/jsonschema"
 )
 
@@ -40,27 +39,23 @@ var (
 )
 
 type Room struct {
-	DeltaClients   DeltaTargets
-	ClassicClients ClassicTargets
-	GlobalVars     sync.Map // Protocol-agnostic global variable storage
+	Clients    Targets
+	GlobalVars sync.Map // Protocol-agnostic global variable storage
 }
 
-type DeltaTargets map[*duplex.Peer]bool
-type DeltaPeers []*duplex.Peer
-
-type ClassicTargets map[*ClassicClient]bool
-type ClassicClients []*ClassicClient
+type Targets map[*BridgeClient]bool
+type BridgeClients []*BridgeClient
 
 type Protocol interface {
 
 	// Helper that runs automatically to clean up any remaining states for a detected protocol once a client disconnects
-	On_Disconnect(*ClassicClient, RoomKeys)
+	On_Disconnect(*BridgeClient, RoomKeys)
 
 	// Downgrades or transforms a packet's structure to match the target client's dialect.
-	Apply_Quirks(*ClassicClient, any) any
+	Apply_Quirks(*BridgeClient, any) any
 
 	// Lead-in function that detects a client's protocol and dialect, and processes the packet if a protocol match was made.
-	Reader(*ClassicClient, []byte) bool
+	Reader(*BridgeClient, []byte) bool
 }
 
 type Config struct {
@@ -95,9 +90,8 @@ type Server struct {
 	Done               chan bool
 	Config             *Config
 	instance           *duplex.Instance
-	DeltaClients       DeltaTargets
 	deltaclientsmu     sync.RWMutex
-	ClassicClients     ClassicTargets
+	ClassicClients     Targets
 	classicclientsmu   sync.RWMutex
 	RoomsMap           map[RoomKey]*Room // Replaces clients map
 	roomsMu            sync.RWMutex      // Replaces clientsMu
@@ -105,6 +99,10 @@ type Server struct {
 	App                *fiber.App
 	Address            string
 	DeltaResolverCache map[*duplex.Peer]HelloArgs
+}
+
+type CLDelta struct {
+	*Server
 }
 
 // CL4_or_CL3 implements the Protocol interface
@@ -119,8 +117,8 @@ type CL4_UserObject struct {
 	Username any    `json:"username,omitempty"`
 }
 
-// CL4_or_CL3_Packet represents a CloudLink 4/3 packet. This is the packet format that the bridge's WebSocket gateway natively understands.
-type CL4_or_CL3_Packet struct {
+// Common_Packet is the internal packet format that the bridge's WebSocket gateway natively understands.
+type Common_Packet struct {
 	Command   string `json:"cmd" jsonschema:"required"`
 	Name      any    `json:"name,omitempty"`
 	Data      any    `json:"data,omitempty"` // For CL3 0.1.5 dialect
@@ -136,7 +134,7 @@ type CL4_or_CL3_Packet struct {
 	Recipient any    `json:"recipient,omitempty"` // Legacy/alternative for ID
 }
 
-func (p *CL4_or_CL3_Packet) String() string {
+func (p *Common_Packet) String() string {
 	b, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -223,10 +221,11 @@ type HelloArgs struct {
 type RoomKey string
 type RoomKeys []RoomKey
 
-type ClassicClient struct {
+type BridgeClient struct {
 	Conn     *websocket.Conn
-	ID       snowflake.ID
-	UUID     uuid.UUID
+	ID       string
+	Peer     *duplex.Peer
+	UUID     string
 	Username any
 	writer   chan []byte
 	exit     chan bool

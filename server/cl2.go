@@ -20,14 +20,14 @@ type cl2Parser struct {
 type CL2 struct {
 	*Server
 	parsers []cl2Parser
-	links   map[*ClassicClient]string // Stores the CL2 "Soft Link"
-	linksMu sync.RWMutex              // Mutex for thread-safe map access
+	links   map[*BridgeClient]string // Stores the CL2 "Soft Link"
+	linksMu sync.RWMutex             // Mutex for thread-safe map access
 }
 
 func New_CL2(parent *Server) Protocol {
 	return &CL2{
 		Server: parent,
-		links:  make(map[*ClassicClient]string),
+		links:  make(map[*BridgeClient]string),
 		parsers: []cl2Parser{
 			{
 				name: "linked_p_vars",
@@ -73,7 +73,7 @@ func New_CL2(parent *Server) Protocol {
 	}
 }
 
-func (s *CL2) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
+func (s *CL2) On_Disconnect(c *BridgeClient, rooms RoomKeys) {
 	s.linksMu.Lock()
 	delete(s.links, c)
 	s.linksMu.Unlock()
@@ -85,7 +85,7 @@ func (s *CL2) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
 	userObj := s.UserObject(c)
 
 	for _, room := range rooms { // <--- Loop over `rooms` param
-		s.Broadcast(room, &CL4_or_CL3_Packet{
+		s.Broadcast(room, &Common_Packet{
 			Command: "ulist",
 			Mode:    "remove",
 			Value:   userObj,
@@ -94,7 +94,7 @@ func (s *CL2) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
 	}
 }
 
-func (s *CL2) Reader(client *ClassicClient, data []byte) bool {
+func (s *CL2) Reader(client *BridgeClient, data []byte) bool {
 	message := string(data)
 	if !strings.HasPrefix(message, "<%") {
 		return false
@@ -153,7 +153,7 @@ func (s *CL2) Reader(client *ClassicClient, data []byte) bool {
 	return true
 }
 
-func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
+func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 	log.Printf("%s 🢂 <%s>", client.GiveName(), p.Command)
 
 	if client.dialect == Dialect_Undefined {
@@ -166,8 +166,8 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 
 	switch p.Command {
 	case "sh":
-		s.Unicast(client, &CL4_or_CL3_Packet{Command: "server_version", Value: "0.1.5"})
-		s.Unicast(client, &CL4_or_CL3_Packet{
+		s.Unicast(client, &Common_Packet{Command: "server_version", Value: "0.1.5"})
+		s.Unicast(client, &Common_Packet{
 			Command: "ulist",
 			Mode:    "set",
 			Value:   s.Get_User_List(DEFAULT_ROOM),
@@ -192,24 +192,22 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 		}
 		client.Username = p.Sender
 
-		s.Unicast(client, &CL4_or_CL3_Packet{
+		s.Unicast(client, &Common_Packet{
 			Command: "ulist",
 			Mode:    "set",
 			Value:   s.Get_User_List(DEFAULT_ROOM),
 			Rooms:   DEFAULT_ROOM,
 		})
 
-		s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+		s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 			Command: "ulist",
 			Mode:    "add",
 			Value:   s.UserObject(client),
 			Rooms:   DEFAULT_ROOM,
 		}, client)
 
-		client.Server.AnnounceClassicJoin(client, nil)
-
 	case "rf":
-		s.Unicast(client, &CL4_or_CL3_Packet{
+		s.Unicast(client, &Common_Packet{
 			Command: "ulist",
 			Mode:    "set",
 			Value:   s.Get_User_List(DEFAULT_ROOM),
@@ -217,7 +215,7 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 		})
 
 	case "gs", "global":
-		s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+		s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 			Command: "gmsg",
 			Value:   p.Data,
 			Rooms:   DEFAULT_ROOM,
@@ -229,7 +227,7 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 			return
 		}
 		targets := s.Get_Clients(DEFAULT_ROOM, p.Recipient)
-		s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+		s.Multicast(DEFAULT_ROOM, &Common_Packet{
 			Command: "pmsg",
 			Value:   p.Data,
 			Origin:  s.UserObject(client),
@@ -245,7 +243,7 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 
 			if exists && targetID != "" {
 				targets := s.Get_Clients(DEFAULT_ROOM, targetID)
-				s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+				s.Multicast(DEFAULT_ROOM, &Common_Packet{
 					Command: "linked_gmsg", // Internal cross-protocol command
 					Value:   p.Data,
 					Origin:  s.UserObject(client),
@@ -259,7 +257,7 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 			if exists {
 				r.GlobalVars.Store(p.Var, p.Data)
 			}
-			s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 				Command: "gvar",
 				Name:    p.Var,
 				Value:   p.Data,
@@ -273,7 +271,7 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 
 			if exists && targetID != "" {
 				targets := s.Get_Clients(DEFAULT_ROOM, targetID)
-				s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+				s.Multicast(DEFAULT_ROOM, &Common_Packet{
 					Command: "gvar", // CL4 gvar naturally translates to CL2 `vm` mode `g`
 					Name:    p.Var,
 					Value:   p.Data,
@@ -292,14 +290,14 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 		switch p.Mode {
 		case "0":
 			// Mode 0: Linked Private Data -> Multicast to Recipient
-			s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			s.Multicast(DEFAULT_ROOM, &Common_Packet{
 				Command: "linked_pmsg", // Internal cross-protocol command
 				Value:   p.Data,
 				Origin:  s.UserObject(client),
 			}, targets)
 		case "1", "2":
 			// Mode 1 & 2: Private Var -> Multicast to Recipient
-			s.Multicast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			s.Multicast(DEFAULT_ROOM, &Common_Packet{
 				Command: "pvar", // CL4 pvar naturally translates to CL2 `vm` mode `p`
 				Name:    p.Var,
 				Value:   p.Data,
@@ -312,7 +310,7 @@ func (s *CL2) Handler(client *ClassicClient, p *CL2Packet) {
 	}
 }
 
-func (s *CL2) Upgrade_Dialect(c *ClassicClient, newdialect uint) {
+func (s *CL2) Upgrade_Dialect(c *BridgeClient, newdialect uint) {
 	if newdialect > c.dialect {
 		var basestring string
 		if c.dialect == Dialect_Undefined {

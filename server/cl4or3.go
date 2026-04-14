@@ -12,7 +12,7 @@ import (
 func New_CL4_or_CL3(parent *Server) Protocol {
 
 	// Cache the schema
-	schema, err := jsonschema.FromStruct[CL4_or_CL3_Packet]()
+	schema, err := jsonschema.FromStruct[Common_Packet]()
 	if err != nil {
 		panic(err)
 	}
@@ -24,7 +24,7 @@ func New_CL4_or_CL3(parent *Server) Protocol {
 	}
 }
 
-func (s CL4_or_CL3) On_Disconnect(c *ClassicClient, rooms RoomKeys) { // (And Scratch_Handler)
+func (s CL4_or_CL3) On_Disconnect(c *BridgeClient, rooms RoomKeys) { // (And Scratch_Handler)
 	if c.Username == nil || c.Username == "" {
 		return
 	}
@@ -32,7 +32,7 @@ func (s CL4_or_CL3) On_Disconnect(c *ClassicClient, rooms RoomKeys) { // (And Sc
 	userObj := s.UserObject(c)
 
 	for _, room := range rooms { // <--- Loop over `rooms` param
-		s.Broadcast(room, &CL4_or_CL3_Packet{
+		s.Broadcast(room, &Common_Packet{
 			Command: "ulist",
 			Mode:    "remove",
 			Value:   userObj,
@@ -41,7 +41,7 @@ func (s CL4_or_CL3) On_Disconnect(c *ClassicClient, rooms RoomKeys) { // (And Sc
 	}
 }
 
-func (s CL4_or_CL3) Reader(client *ClassicClient, data []byte) bool {
+func (s CL4_or_CL3) Reader(client *BridgeClient, data []byte) bool {
 	// Check if the data is even remotely usable
 	if !json.Valid(data) {
 		log.Println("CL4/CL3 Reader: Invalid JSON received")
@@ -56,7 +56,7 @@ func (s CL4_or_CL3) Reader(client *ClassicClient, data []byte) bool {
 	}
 
 	// Unmarshal into the struct
-	var p *CL4_or_CL3_Packet
+	var p *Common_Packet
 	if err := json.Unmarshal(data, &p); err != nil {
 		log.Printf("CL4/CL3 JSON Unmarshal Error: %s", err)
 		return false
@@ -77,16 +77,16 @@ func (s CL4_or_CL3) Reader(client *ClassicClient, data []byte) bool {
 }
 
 // Main opcode handler for the bridge server
-func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
+func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 	log.Printf("%s 🢂  %v", client.GiveName(), p)
 
 	switch p.Command {
 
 	case "handshake":
 		userObj := s.UserObject(client)
-		s.Unicast(client, &CL4_or_CL3_Packet{Command: "server_version", Value: s.Spoof_Server_Version(client)})
-		s.Unicast(client, &CL4_or_CL3_Packet{Command: "client_obj", Value: userObj})
-		s.Unicast(client, &CL4_or_CL3_Packet{
+		s.Unicast(client, &Common_Packet{Command: "server_version", Value: s.Spoof_Server_Version(client)})
+		s.Unicast(client, &Common_Packet{Command: "client_obj", Value: userObj})
+		s.Unicast(client, &Common_Packet{
 			Command: "ulist",
 			Mode:    "set",
 			Value:   s.Get_User_List(DEFAULT_ROOM),
@@ -94,10 +94,10 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 		})
 
 		if client.Server.Config.Enable_MOTD {
-			s.Unicast(client, &CL4_or_CL3_Packet{Command: "motd", Value: client.Server.Config.MOTD_Message})
+			s.Unicast(client, &Common_Packet{Command: "motd", Value: client.Server.Config.MOTD_Message})
 		}
 		if client.Server.Config.Serve_IP_Addresses {
-			s.Unicast(client, &CL4_or_CL3_Packet{Command: "client_ip", Value: client.Conn.IP()})
+			s.Unicast(client, &Common_Packet{Command: "client_ip", Value: client.Conn.IP()})
 		}
 		s.Sync_Room_State(client, DEFAULT_ROOM)
 		if p.Listener != nil {
@@ -115,21 +115,19 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 
 			s.Send_Status_Code(client, StatusOK, p.Listener, nil, s.UserObject(client))
 
-			s.Unicast(client, &CL4_or_CL3_Packet{
+			s.Unicast(client, &Common_Packet{
 				Command: "ulist",
 				Mode:    "set",
 				Value:   s.Get_User_List(DEFAULT_ROOM),
 				Rooms:   DEFAULT_ROOM,
 			})
 
-			s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 				Command: "ulist",
 				Mode:    "add",
 				Value:   s.UserObject(client),
 				Rooms:   DEFAULT_ROOM,
 			}, client)
-
-			client.Server.AnnounceClassicJoin(client, nil)
 		}
 
 		s.Sync_Room_State(client, DEFAULT_ROOM)
@@ -153,7 +151,7 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 				}
 			}
 
-			s.Broadcast(room, &CL4_or_CL3_Packet{
+			s.Broadcast(room, &Common_Packet{
 				Command: p.Command,
 				Value:   p.Value,
 				Name:    p.Name,
@@ -164,7 +162,7 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 
 		if p.Listener != nil {
 			if client.dialect <= Dialect_CL4_0_1_9 {
-				s.Unicast(client, &CL4_or_CL3_Packet{
+				s.Unicast(client, &Common_Packet{
 					Command:  p.Command,
 					Name:     p.Name,
 					Value:    p.Value,
@@ -194,7 +192,7 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 			targets := s.Get_Clients(room, p.ID)
 			if len(targets) > 0 {
 				anyResultsFound = true
-				s.Multicast(room, &CL4_or_CL3_Packet{
+				s.Multicast(room, &Common_Packet{
 					Command: p.Command,
 					Value:   p.Value,
 					Name:    p.Name,
@@ -224,8 +222,8 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 			originObj = s.UserObject(client)
 		} else {
 			originObj = map[string]string{
-				"id":   client.ID.String(),
-				"uuid": client.UUID.String(),
+				"id":   client.ID,
+				"uuid": client.UUID,
 			}
 		}
 
@@ -233,7 +231,7 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 			targets := s.Get_Clients(room, p.ID)
 			if len(targets) > 0 {
 				anyResultsFound = true
-				s.Multicast(room, &CL4_or_CL3_Packet{
+				s.Multicast(room, &Common_Packet{
 					Command: "direct",
 					Value:   p.Value,
 					Origin:  originObj,
@@ -270,7 +268,7 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 			s.Subscribe(client, room)
 
 			// Broadcast addition to new room
-			s.Broadcast(room, &CL4_or_CL3_Packet{
+			s.Broadcast(room, &Common_Packet{
 				Command: "ulist",
 				Mode:    "add",
 				Value:   s.UserObject(client),
@@ -278,7 +276,7 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 			}, client)
 
 			// Send the user the full list of the new room
-			s.Unicast(client, &CL4_or_CL3_Packet{
+			s.Unicast(client, &Common_Packet{
 				Command: "ulist",
 				Mode:    "set",
 				Value:   s.Get_User_List(room),
@@ -289,18 +287,15 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 			s.Sync_Room_State(client, room)
 		}
 
-		client.Server.AnnounceClassicJoin(client, roomsToLink)
-
 		// If default isn't explicitly requested, kick them from it
 		if !hasDefault && s.Is_Client_In_Room(client, DEFAULT_ROOM) {
 			s.Unsubscribe(client, DEFAULT_ROOM)
-			s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 				Command: "ulist",
 				Mode:    "remove",
 				Value:   s.UserObject(client),
 				Rooms:   DEFAULT_ROOM,
 			}, client)
-			client.Server.AnnounceClassicLeft(client, []RoomKey{DEFAULT_ROOM})
 		}
 
 		if p.Listener != nil {
@@ -325,7 +320,7 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 		for _, room := range roomsToUnlink {
 			log.Println("Unlinking from room", room)
 			s.Unsubscribe(client, room)
-			s.Broadcast(room, &CL4_or_CL3_Packet{
+			s.Broadcast(room, &Common_Packet{
 				Command: "ulist",
 				Mode:    "remove",
 				Value:   s.UserObject(client),
@@ -333,18 +328,15 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 			}, client)
 		}
 
-		client.Server.AnnounceClassicLeft(client, roomsToUnlink)
-
 		// If they are in 0 rooms, force them back into default
 		if len(client.Rooms) == 0 {
 			s.Subscribe(client, DEFAULT_ROOM)
-			s.Broadcast(DEFAULT_ROOM, &CL4_or_CL3_Packet{
+			s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 				Command: "ulist", Mode: "add", Value: s.UserObject(client), Rooms: DEFAULT_ROOM,
 			}, client)
-			s.Unicast(client, &CL4_or_CL3_Packet{
+			s.Unicast(client, &Common_Packet{
 				Command: "ulist", Mode: "set", Value: s.Get_User_List(DEFAULT_ROOM), Rooms: DEFAULT_ROOM,
 			})
-			client.Server.AnnounceClassicJoin(client, []RoomKey{DEFAULT_ROOM})
 		}
 
 		if p.Listener != nil {
@@ -354,8 +346,8 @@ func (s CL4_or_CL3) Handler(client *ClassicClient, p *CL4_or_CL3_Packet) {
 }
 
 // Builds and unicasts a status code packet to a client
-func (s CL4_or_CL3) Send_Status_Code(client *ClassicClient, code StatusCode, listener any, details any, val any) {
-	packet := &CL4_or_CL3_Packet{
+func (s CL4_or_CL3) Send_Status_Code(client *BridgeClient, code StatusCode, listener any, details any, val any) {
+	packet := &Common_Packet{
 		Command:  "statuscode",
 		Code:     code.String(),
 		CodeID:   code.Code,
@@ -373,7 +365,7 @@ func (s CL4_or_CL3) Send_Status_Code(client *ClassicClient, code StatusCode, lis
 }
 
 // Generates a spoofed server version string to fool the client's compatibility checker
-func (s CL4_or_CL3) Spoof_Server_Version(client *ClassicClient) string {
+func (s CL4_or_CL3) Spoof_Server_Version(client *BridgeClient) string {
 	switch client.dialect {
 	case Dialect_CL3_0_1_5:
 		return "0.1.5"
@@ -391,7 +383,7 @@ func (s CL4_or_CL3) Spoof_Server_Version(client *ClassicClient) string {
 }
 
 // Automatically determine the protocol version based on known first-packet behaviors
-func (s CL4_or_CL3) Derive_Dialect(p *CL4_or_CL3_Packet, c *ClassicClient) {
+func (s CL4_or_CL3) Derive_Dialect(p *Common_Packet, c *BridgeClient) {
 	if p.Command == "handshake" {
 		if valMap, ok := p.Value.(map[string]any); ok {
 			_, langExists := valMap["language"]
@@ -414,7 +406,7 @@ func (s CL4_or_CL3) Derive_Dialect(p *CL4_or_CL3_Packet, c *ClassicClient) {
 }
 
 // Helper to automatically change the dialect version of the client based on known first-packet behaviors
-func (p *CL4_or_CL3) Upgrade_Dialect(c *ClassicClient, newdialect uint) {
+func (p *CL4_or_CL3) Upgrade_Dialect(c *BridgeClient, newdialect uint) {
 	if newdialect > c.dialect {
 
 		var basestring string
@@ -437,23 +429,5 @@ func (p *CL4_or_CL3) Upgrade_Dialect(c *ClassicClient, newdialect uint) {
 		case Dialect_CL4_0_2_0:
 			log.Println(basestring + "CL4 dialect v0.2.0")
 		}
-	}
-}
-
-// Sync_Room_State loops through a room's global variables and unicasts them to a client
-func (s CL4_or_CL3) Sync_Room_State(client *ClassicClient, room RoomKey) {
-	s.roomsMu.RLock()
-	r, exists := s.RoomsMap[room]
-	s.roomsMu.RUnlock()
-	if exists {
-		r.GlobalVars.Range(func(key, value any) bool {
-			s.Unicast(client, &CL4_or_CL3_Packet{
-				Command: "gvar",
-				Name:    key,
-				Value:   value,
-				Rooms:   room,
-			})
-			return true
-		})
 	}
 }

@@ -24,7 +24,7 @@ func New_Scratch(parent *Server) Protocol {
 	}
 }
 
-func (s Scratch_Handler) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
+func (s Scratch_Handler) On_Disconnect(c *BridgeClient, rooms RoomKeys) {
 	if c.Username == nil || c.Username == "" {
 		return
 	}
@@ -32,7 +32,7 @@ func (s Scratch_Handler) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
 	userObj := s.UserObject(c)
 
 	for _, room := range rooms {
-		s.Broadcast(room, &CL4_or_CL3_Packet{
+		s.Broadcast(room, &Common_Packet{
 			Command: "ulist",
 			Mode:    "remove",
 			Value:   userObj,
@@ -41,7 +41,7 @@ func (s Scratch_Handler) On_Disconnect(c *ClassicClient, rooms RoomKeys) {
 	}
 }
 
-func (s Scratch_Handler) Reader(client *ClassicClient, data []byte) bool {
+func (s Scratch_Handler) Reader(client *BridgeClient, data []byte) bool {
 	if !json.Valid(data) {
 		return false
 	}
@@ -61,7 +61,7 @@ func (s Scratch_Handler) Reader(client *ClassicClient, data []byte) bool {
 	return true
 }
 
-func (s Scratch_Handler) Handler(client *ClassicClient, p *ScratchPacket) {
+func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 	log.Printf("%s 🢂  %s", client.GiveName(), p)
 
 	switch p.Method {
@@ -96,7 +96,13 @@ func (s Scratch_Handler) Handler(client *ClassicClient, p *ScratchPacket) {
 		s.Unsubscribe(client, DEFAULT_ROOM)
 		s.Subscribe(client, projectRoom)
 
-		client.Server.AnnounceClassicJoin(client, nil)
+		// Emit join event for other protocols
+		s.Broadcast(projectRoom, &Common_Packet{
+			Command: "ulist",
+			Mode:    "add",
+			Value:   s.UserObject(client),
+			Rooms:   projectRoom,
+		}, client)
 
 		// Sync Shared Variables!
 		s.roomsMu.RLock()
