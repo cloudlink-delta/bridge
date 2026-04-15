@@ -154,6 +154,19 @@ func (s *CL2) Reader(client *BridgeClient, data []byte) bool {
 }
 
 func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
+	if client == nil || client.Conn == nil {
+		return
+	}
+
+	if client.Conn != nil {
+		s.classicclientsmu.RLock()
+		active := s.ClassicClients[client]
+		s.classicclientsmu.RUnlock()
+		if !active {
+			return
+		}
+	}
+
 	log.Printf("%s 🢂 <%s>", client.GiveName(), p.Command)
 
 	if client.dialect == Dialect_Undefined {

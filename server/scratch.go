@@ -62,6 +62,19 @@ func (s Scratch_Handler) Reader(client *BridgeClient, data []byte) bool {
 }
 
 func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
+	if client == nil || client.Conn == nil {
+		return
+	}
+
+	if client.Conn != nil {
+		s.classicclientsmu.RLock()
+		active := s.ClassicClients[client]
+		s.classicclientsmu.RUnlock()
+		if !active {
+			return
+		}
+	}
+
 	log.Printf("%s 🢂  %s", client.GiveName(), p)
 
 	switch p.Method {

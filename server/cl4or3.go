@@ -78,6 +78,19 @@ func (s CL4_or_CL3) Reader(client *BridgeClient, data []byte) bool {
 
 // Main opcode handler for the bridge server
 func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
+	if client == nil || client.Conn == nil {
+		return
+	}
+
+	if client.Conn != nil {
+		s.classicclientsmu.RLock()
+		active := s.ClassicClients[client]
+		s.classicclientsmu.RUnlock()
+		if !active {
+			return
+		}
+	}
+
 	log.Printf("%s 🢂  %v", client.GiveName(), p)
 
 	switch p.Command {

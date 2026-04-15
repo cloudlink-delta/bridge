@@ -221,6 +221,14 @@ func (s *Server) Unicast(c *BridgeClient, p any) {
 		return
 	}
 
+	// Check if client is still active to avoid "send on closed channel"
+	s.classicclientsmu.RLock()
+	active := s.ClassicClients[c]
+	s.classicclientsmu.RUnlock()
+	if !active {
+		return
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("⚠️  Recovered from panic: %v", r)
