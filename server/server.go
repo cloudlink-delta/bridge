@@ -63,6 +63,15 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		}),
 	}
 
+	// Configure Health endpoint
+	server.App.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":         server.instance.GetPeerState(),
+			"active_clients": server.ReportActiveConnections(true),
+			"active_rooms":   server.ReportActiveRooms(true),
+		})
+	})
+
 	// Configure CL2 / CL3 / CL4 / Scratch CloudVars Gateway
 	server.App.Use("/", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
@@ -75,15 +84,6 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	server.App.Get("/", websocket.New(func(c *websocket.Conn) {
 		server.Run_Client(c)
 	}))
-
-	// Configure Health endpoint
-	server.App.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status":         server.instance.GetPeerState(),
-			"active_clients": server.ReportActiveConnections(true),
-			"active_rooms":   server.ReportActiveRooms(true),
-		})
-	})
 
 	// Configure Delta Peer
 	server.ConfigureDelta(designation)
