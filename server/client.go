@@ -16,7 +16,7 @@ func (c *BridgeClient) Writer() {
 	for p := range c.writer {
 		log.Printf("%s 🢀  %v", c.GiveName(), string(p))
 		if err := c.Conn.WriteMessage(websocket.TextMessage, p); err != nil {
-			log.Printf("Error writing to client %s: %v", c.ID, err)
+			log.Printf("%s ⚠️  Error writing to client: %v", c.GiveName(), err)
 			break
 		}
 	}
@@ -42,7 +42,7 @@ reader:
 
 			c.msg_count++
 			if c.msg_count > c.Server.Config.Rate_Limit_Burst {
-				log.Printf("Client %s exceeded rate limit, disconnecting.", c.GiveName())
+				log.Printf("%s ⚠️  Rate limit exceeded, disconnecting.", c.GiveName())
 				c.writer <- []byte("Your client has exceeded the ratelimit allowed by the server. Please reduce the messages that you send.")
 				c.Server.Respond_With_Code(c.Conn, Ratelimit_Exceeded)
 				c.exit <- true
