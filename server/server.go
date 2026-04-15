@@ -132,6 +132,10 @@ func (s *Server) Copy_Clients(room RoomKey) BridgeClients {
 }
 
 func (s *Server) Unicast(c *BridgeClient, p any) {
+	if c == nil || c.Protocol == nil {
+		return
+	}
+
 	// log.Printf("[⁉️  Quirks] Applying quirks for %T %v (origin: %s)", p, p, c.GiveName())
 	patched := c.Protocol.Apply_Quirks(c, p)
 	if patched == nil {
