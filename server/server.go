@@ -64,7 +64,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	}
 
 	// Configure CL2 / CL3 / CL4 / Scratch CloudVars Gateway
-	server.App.Use("/gateway", func(c *fiber.Ctx) error {
+	server.App.Use("/", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true)
 			return c.Next()
@@ -72,7 +72,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		return fiber.ErrUpgradeRequired
 	})
 
-	server.App.Get("/gateway", websocket.New(func(c *websocket.Conn) {
+	server.App.Get("/", websocket.New(func(c *websocket.Conn) {
 		server.Run_Client(c)
 	}))
 
