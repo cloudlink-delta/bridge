@@ -76,6 +76,15 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		server.Run_Client(c)
 	}))
 
+	// Configure Health endpoint
+	server.App.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":         server.instance.GetPeerState(),
+			"active_clients": server.ReportActiveConnections(true),
+			"active_rooms":   server.ReportActiveRooms(true),
+		})
+	})
+
 	// Configure Delta Peer
 	server.ConfigureDelta(designation)
 
