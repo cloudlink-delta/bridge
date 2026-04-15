@@ -105,12 +105,8 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		}, client)
 
 		// Sync Shared Variables!
-		s.roomsMu.RLock()
-		r, exists := s.RoomsMap[projectRoom]
-		s.roomsMu.RUnlock()
-
-		if exists {
-			r.GlobalVars.Range(func(key, value any) bool {
+		if gv := s.GetRoomGlobalVars(projectRoom); gv != nil {
+			gv.Range(func(key, value any) bool {
 				s.Unicast(client, &ScratchPacket{
 					Method: "set",
 					Name:   key,
@@ -126,11 +122,8 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		}
 		projectRoom := client.Rooms[0]
 
-		s.roomsMu.RLock()
-		r, exists := s.RoomsMap[projectRoom]
-		s.roomsMu.RUnlock()
-		if exists {
-			r.GlobalVars.Store(p.Name, p.Value)
+		if gv := s.GetRoomGlobalVars(projectRoom); gv != nil {
+			gv.Store(p.Name, p.Value)
 		}
 
 		s.Broadcast(projectRoom, &ScratchPacket{
@@ -145,13 +138,10 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		}
 		projectRoom := client.Rooms[0]
 
-		s.roomsMu.RLock()
-		r, exists := s.RoomsMap[projectRoom]
-		s.roomsMu.RUnlock()
-		if exists {
-			if oldVal, ok := r.GlobalVars.Load(p.Name); ok {
-				r.GlobalVars.Store(p.NewName, oldVal)
-				r.GlobalVars.Delete(p.Name)
+		if gv := s.GetRoomGlobalVars(projectRoom); gv != nil {
+			if oldVal, ok := gv.Load(p.Name); ok {
+				gv.Store(p.NewName, oldVal)
+				gv.Delete(p.Name)
 			}
 		}
 
@@ -167,11 +157,8 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		}
 		projectRoom := client.Rooms[0]
 
-		s.roomsMu.RLock()
-		r, exists := s.RoomsMap[projectRoom]
-		s.roomsMu.RUnlock()
-		if exists {
-			r.GlobalVars.Delete(p.Name)
+		if gv := s.GetRoomGlobalVars(projectRoom); gv != nil {
+			gv.Delete(p.Name)
 		}
 
 		s.Broadcast(projectRoom, &ScratchPacket{

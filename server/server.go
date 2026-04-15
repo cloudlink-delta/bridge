@@ -2,7 +2,6 @@ package server
 
 import (
 	"log"
-	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -64,6 +63,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		Config:             server_config,
 		instance:           instance,
 		RoomsMap:           make(map[RoomKey]*Room),
+		roomEvents:         make(chan RoomEvent, 1024),
 		snowflakeGen:       node,
 		App: fiber.New(fiber.Config{
 			JSONEncoder: json.Marshal,
@@ -104,6 +104,9 @@ func (s *Server) Run() {
 	var wg sync.WaitGroup
 	wg.Add(2) // Add 2 waitgroup tasks
 
+	// Launch Room Manager
+	go s.RoomManager()
+
 	// Launch fiber app
 	go func() {
 		defer wg.Done()
@@ -130,13 +133,71 @@ func (s *Server) Run() {
 	s.Done <- true
 }
 
-func (s *Server) Copy_Clients(room RoomKey) BridgeClients {
-	s.roomsMu.RLock()
-	defer s.roomsMu.RUnlock()
-	if r, ok := s.RoomsMap[room]; ok {
-		return slices.Collect(maps.Keys(r.Clients))
+func (s *Server) RoomManager() {
+	for event := range s.roomEvents {
+		switch event.Op {
+		case OpJoinRoom:
+			r, exists := s.RoomsMap[event.Room]
+			if event.Room == DEFAULT_ROOM {
+				log.Printf("%s 🚪 Joining default room", event.Client.GiveName())
+			}
+			if !exists {
+				log.Printf("%s 🚪 Creating room %s", event.Client.GiveName(), event.Room)
+				r = &Room{Clients: make(Targets)}
+				s.RoomsMap[event.Room] = r
+			}
+			r.Clients[event.Client] = true
+		case OpLeaveRoom:
+			if r, exists := s.RoomsMap[event.Room]; exists {
+				delete(r.Clients, event.Client)
+				if len(r.Clients) == 0 {
+					delete(s.RoomsMap, event.Room)
+					log.Printf("%s 🚪 Destroying vacant room %s", event.Client.GiveName(), event.Room)
+				}
+			}
+		case OpGetClients:
+			var clients BridgeClients
+			if r, exists := s.RoomsMap[event.Room]; exists {
+				clients = make(BridgeClients, 0, len(r.Clients))
+				for c := range r.Clients {
+					clients = append(clients, c)
+				}
+			}
+			event.Respond <- clients
+		case OpDoesRoomExist:
+			_, exists := s.RoomsMap[event.Room]
+			event.Respond <- exists
+		case OpGetActiveRooms:
+			event.Respond <- len(s.RoomsMap)
+		case OpCanAllocateNRooms:
+			active_rooms := len(s.RoomsMap)
+			decrement := 0
+			if default_room, ok := s.RoomsMap[DEFAULT_ROOM]; ok {
+				if len(default_room.Clients) == 1 && default_room.Clients[event.Client] {
+					decrement = -1
+				}
+			}
+			event.Respond <- active_rooms+event.N+decrement <= int(s.Config.Maximum_Rooms)
+		case OpGetRoomForVars:
+			if r, exists := s.RoomsMap[event.Room]; exists {
+				event.Respond <- &r.GlobalVars
+			} else {
+				event.Respond <- (*sync.Map)(nil)
+			}
+		}
 	}
-	return nil
+}
+
+func (s *Server) GetRoomGlobalVars(room RoomKey) *sync.Map {
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpGetRoomForVars, Room: room, Respond: resp}
+	return (<-resp).(*sync.Map)
+}
+
+func (s *Server) Copy_Clients(room RoomKey) BridgeClients {
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpGetClients, Room: room, Respond: resp}
+	return (<-resp).(BridgeClients)
 }
 
 func (s *Server) Unicast(c *BridgeClient, p any) {
@@ -184,19 +245,7 @@ func (s *Server) Broadcast(room RoomKey, p any, exclude ...*BridgeClient) {
 		return slices.Contains(exclude, c)
 	})
 
-	// Verify the client hasn't been unsubscribed right before sending
-	var finalTargets BridgeClients
-	s.roomsMu.RLock()
-	if r, ok := s.RoomsMap[room]; ok {
-		for _, client := range targets {
-			if r.Clients[client] {
-				finalTargets = append(finalTargets, client)
-			}
-		}
-	}
-	s.roomsMu.RUnlock()
-
-	for _, client := range finalTargets {
+	for _, client := range targets {
 		s.Unicast(client, p)
 	}
 }
@@ -206,18 +255,15 @@ func (s *Server) Multicast(room RoomKey, p any, targets Targets) {
 		return
 	}
 
-	var finalTargets BridgeClients
-	s.roomsMu.RLock()
-	if r, ok := s.RoomsMap[room]; ok {
-		for client := range targets {
-			if r.Clients[client] {
-				finalTargets = append(finalTargets, client)
-			}
+	roomClients := s.Copy_Clients(room)
+	validTargets := make(BridgeClients, 0, len(targets))
+	for _, c := range roomClients {
+		if targets[c] {
+			validTargets = append(validTargets, c)
 		}
 	}
-	s.roomsMu.RUnlock()
 
-	for _, client := range finalTargets {
+	for _, client := range validTargets {
 		s.Unicast(client, p)
 	}
 }
@@ -307,26 +353,13 @@ func (s *Server) Destroy_Client(c *BridgeClient) {
 }
 
 func (s *Server) DoesRoomExist(room RoomKey) bool {
-	s.roomsMu.RLock()
-	defer s.roomsMu.RUnlock()
-	_, exists := s.RoomsMap[room]
-	return exists
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpDoesRoomExist, Room: room, Respond: resp}
+	return (<-resp).(bool)
 }
 
 func (s *Server) Subscribe(client *BridgeClient, room RoomKey) {
-	s.roomsMu.Lock()
-	r, exists := s.RoomsMap[room]
-	if room == DEFAULT_ROOM {
-		log.Printf("%s 🚪 Joining default room", client.GiveName())
-	}
-	if !exists {
-		log.Printf("%s 🚪 Creating room %s", client.GiveName(), room)
-		r = &Room{Clients: make(Targets)}
-		s.RoomsMap[room] = r
-	}
-
-	r.Clients[client] = true
-	s.roomsMu.Unlock()
+	s.roomEvents <- RoomEvent{Op: OpJoinRoom, Client: client, Room: room}
 
 	client.room_mux.Lock()
 	defer client.room_mux.Unlock()
@@ -338,15 +371,7 @@ func (s *Server) Subscribe(client *BridgeClient, room RoomKey) {
 }
 
 func (s *Server) Unsubscribe(client *BridgeClient, room RoomKey) {
-	s.roomsMu.Lock()
-	if r, exists := s.RoomsMap[room]; exists {
-		delete(r.Clients, client)
-		if len(r.Clients) == 0 {
-			delete(s.RoomsMap, room)
-			log.Printf("%s 🚪 Destroying vacant room %s", client.GiveName(), room)
-		}
-	}
-	s.roomsMu.Unlock()
+	s.roomEvents <- RoomEvent{Op: OpLeaveRoom, Client: client, Room: room}
 
 	client.room_mux.Lock()
 	defer client.room_mux.Unlock()
@@ -362,9 +387,9 @@ func (*Server) Respond_With_Code(c *websocket.Conn, code SocketCodes) error {
 }
 
 func (s *Server) ReportActiveRooms(silent bool) int {
-	s.roomsMu.RLock()
-	rooms_open := len(s.RoomsMap)
-	s.roomsMu.RUnlock()
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpGetActiveRooms, Respond: resp}
+	rooms_open := (<-resp).(int)
 	if !silent {
 		log.Printf("🚪 There are %v room(s) active.", rooms_open)
 	}
@@ -391,29 +416,7 @@ func (s *Server) DisplayStatus() {
 // This function assumes that if granted, the client joins the n allocated rooms
 // and frees the default room from memory.
 func (s *Server) CanAllocateNRooms(c *BridgeClient, n int) bool {
-	decrement_is_only_one_in_default := func() int {
-		s.roomsMu.RLock()
-		default_room, ok := s.RoomsMap[DEFAULT_ROOM]
-		defer s.roomsMu.RUnlock()
-
-		// If the room doesn't exist, it isn't taking up an active room slot.
-		// We cannot give a discount.
-		if !ok {
-			return 0
-		}
-
-		// Allow the decrement since the peer is the only one in the room,
-		// joining the new room would render the default empty and eligible for GC.
-		if len(default_room.Clients) == 1 && default_room.Clients[c] {
-			return -1
-		}
-
-		// No decrement permitted otherwise
-		return 0
-	}()
-
-	active_rooms := s.ReportActiveRooms(true)
-
-	// Projected rooms must be LESS THAN OR EQUAL TO the maximum limit
-	return active_rooms+n+decrement_is_only_one_in_default <= int(s.Config.Maximum_Rooms)
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpCanAllocateNRooms, Client: c, N: n, Respond: resp}
+	return (<-resp).(bool)
 }

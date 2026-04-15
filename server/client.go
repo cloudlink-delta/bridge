@@ -27,10 +27,8 @@ reader:
 	for {
 		if msg_type, packet, err := c.Conn.ReadMessage(); err != nil {
 			log.Printf("%s %v", c.GiveName(), err)
-			if websocket.IsCloseError(err) || websocket.IsUnexpectedCloseError(err) {
-				c.exit <- true
-				break reader
-			}
+			c.exit <- true
+			break reader
 		} else {
 			// Rate limit check
 			now := time.Now()

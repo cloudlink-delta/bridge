@@ -63,8 +63,8 @@ func (s *Server) ConfigureDelta(designation string) {
 
 		// Unregister cache entry if present
 		s.deltaclientsmu.Lock()
-		defer s.deltaclientsmu.Unlock()
 		delete(s.DeltaResolverCache, peer)
+		s.deltaclientsmu.Unlock()
 
 		bc.Protocol.On_Disconnect(bc, currentRooms)
 	}
@@ -260,11 +260,8 @@ func (s *Server) ConfigureDelta(designation string) {
 			p.Rooms = room
 			s.Broadcast(room, p, bc)
 
-			s.roomsMu.RLock()
-			r, exists := s.RoomsMap[room]
-			s.roomsMu.RUnlock()
-			if exists {
-				r.GlobalVars.Store(packet.Id, packet.Payload)
+			if gv := s.GetRoomGlobalVars(room); gv != nil {
+				gv.Store(packet.Id, packet.Payload)
 			}
 		}
 	})

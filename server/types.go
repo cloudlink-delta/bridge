@@ -50,6 +50,26 @@ type Room struct {
 type Targets map[*BridgeClient]bool
 type BridgeClients []*BridgeClient
 
+type RoomOp int
+
+const (
+	OpJoinRoom RoomOp = iota
+	OpLeaveRoom
+	OpGetClients
+	OpDoesRoomExist
+	OpGetActiveRooms
+	OpCanAllocateNRooms
+	OpGetRoomForVars
+)
+
+type RoomEvent struct {
+	Op      RoomOp
+	Client  *BridgeClient
+	Room    RoomKey
+	N       int
+	Respond chan any
+}
+
 type Protocol interface {
 
 	// Helper that runs automatically to clean up any remaining states for a detected protocol once a client disconnects
@@ -104,7 +124,7 @@ type Server struct {
 	ClassicClients     Targets
 	classicclientsmu   sync.RWMutex
 	RoomsMap           map[RoomKey]*Room // Replaces clients map
-	roomsMu            sync.RWMutex      // Replaces clientsMu
+	roomEvents         chan RoomEvent    // Replaces roomsMu
 	snowflakeGen       *snowflake.Node
 	App                *fiber.App
 	Address            string

@@ -251,11 +251,8 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 			}
 		case "1":
 			// Mode 1: Standard Global Variable Broadcast
-			s.roomsMu.RLock()
-			r, exists := s.RoomsMap[DEFAULT_ROOM]
-			s.roomsMu.RUnlock()
-			if exists {
-				r.GlobalVars.Store(p.Var, p.Data)
+			if gv := s.GetRoomGlobalVars(DEFAULT_ROOM); gv != nil {
+				gv.Store(p.Var, p.Data)
 			}
 			s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 				Command: "gvar",

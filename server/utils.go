@@ -98,11 +98,8 @@ func (s *Server) Is_Client_In_Room(client *BridgeClient, room RoomKey) bool {
 
 // Sync_Room_State loops through a room's global variables and unicasts them to a client
 func (s *Server) Sync_Room_State(client *BridgeClient, room RoomKey) {
-	s.roomsMu.RLock()
-	r, exists := s.RoomsMap[room]
-	s.roomsMu.RUnlock()
-	if exists {
-		r.GlobalVars.Range(func(key, value any) bool {
+	if gv := s.GetRoomGlobalVars(room); gv != nil {
+		gv.Range(func(key, value any) bool {
 			s.Unicast(client, &Common_Packet{
 				Command: "gvar",
 				Name:    key,

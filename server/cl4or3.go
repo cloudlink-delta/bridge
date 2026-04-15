@@ -143,11 +143,8 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 
 			// Store the variable dynamically across all protocols
 			if p.Command == "gvar" {
-				s.roomsMu.RLock()
-				r, exists := s.RoomsMap[room]
-				s.roomsMu.RUnlock()
-				if exists {
-					r.GlobalVars.Store(p.Name, p.Value)
+				if gv := s.GetRoomGlobalVars(room); gv != nil {
+					gv.Store(p.Name, p.Value)
 				}
 			}
 
