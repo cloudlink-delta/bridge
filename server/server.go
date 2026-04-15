@@ -37,6 +37,14 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		panic("invalid maximum clients")
 	}
 
+	if server_config.Rate_Limit_Burst <= 0 {
+		panic("invalid rate limit burst")
+	}
+
+	if server_config.Rate_Limit_Interval <= 0 {
+		panic("invalid rate limit interval")
+	}
+
 	if server_config.Address == "" {
 		server_config.Address = ":3000"
 	}

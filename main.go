@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/cloudlink-delta/bridge/server"
 	"github.com/cloudlink-delta/duplex"
@@ -36,6 +37,8 @@ func main() {
 	maxClients := flag.Int("max-clients", 1000, "Maximum number of clients")
 	forceSet := flag.Bool("force-set", true, "Force the use of the `set` ulist mode for legacy CloudLink clients")
 	address := flag.String("address", "127.0.0.1:3000", "Legacy CloudLink listener address")
+	rateLimitBurst := flag.Int("rate-limit-burst", 50, "Maximum number of messages per interval for rate limiting")
+	rateLimitInterval := flag.Duration("rate-limit-interval", time.Second, "Interval for rate limiting")
 
 	// Parse command-line flags
 	flag.Usage = func() {
@@ -48,13 +51,15 @@ func main() {
 	// Defaults
 	designation := ""
 	serverCfg := server.Config{
-		Enable_MOTD:        true,
-		MOTD_Message:       "Welcome to the CloudLink Bridge!",
-		Serve_IP_Addresses: true,
-		Maximum_Rooms:      100,
-		Maximum_Clients:    1000,
-		Force_Set:          true,
-		Address:            "127.0.0.1:3000",
+		Enable_MOTD:         true,
+		MOTD_Message:        "Welcome to the CloudLink Bridge!",
+		Serve_IP_Addresses:  true,
+		Maximum_Rooms:       100,
+		Maximum_Clients:     1000,
+		Force_Set:           true,
+		Address:             "127.0.0.1:3000",
+		Rate_Limit_Burst:    50,
+		Rate_Limit_Interval: time.Second,
 	}
 	duplexCfg := duplex.Config{
 		PingInterval: 5000,
@@ -75,18 +80,20 @@ func main() {
 		}
 
 		var fileCfg struct {
-			Designation      *string            `json:"designation"`
-			EnableMOTD       *bool              `json:"enable_motd"`
-			MOTDMessage      *string            `json:"motd_message"`
-			ServeIPAddresses *bool              `json:"serve_ip_addresses"`
-			MaximumRooms     *int               `json:"maximum_rooms"`
-			MaximumClients   *int               `json:"maximum_clients"`
-			ForceSet         *bool              `json:"force_set"`
-			Address          *string            `json:"address"`
-			ICEServers       []webrtc.ICEServer `json:"ice_servers"`
-			SessionHostname  *string            `json:"session_hostname"`
-			SessionSecure    *bool              `json:"session_secure"`
-			SessionPort      *int               `json:"session_port"`
+			Designation       *string            `json:"designation"`
+			EnableMOTD        *bool              `json:"enable_motd"`
+			MOTDMessage       *string            `json:"motd_message"`
+			ServeIPAddresses  *bool              `json:"serve_ip_addresses"`
+			MaximumRooms      *int               `json:"maximum_rooms"`
+			MaximumClients    *int               `json:"maximum_clients"`
+			ForceSet          *bool              `json:"force_set"`
+			Address           *string            `json:"address"`
+			ICEServers        []webrtc.ICEServer `json:"ice_servers"`
+			SessionHostname   *string            `json:"session_hostname"`
+			SessionSecure     *bool              `json:"session_secure"`
+			SessionPort       *int               `json:"session_port"`
+			RateLimitBurst    *int               `json:"rate_limit_burst"`
+			RateLimitInterval *string            `json:"rate_limit_interval"`
 		}
 
 		if err := json.Unmarshal(data, &fileCfg); err != nil {
@@ -132,6 +139,14 @@ func main() {
 			duplexCfg.Port = *fileCfg.SessionPort
 			sessionPortProvided = true
 		}
+		if fileCfg.RateLimitBurst != nil {
+			serverCfg.Rate_Limit_Burst = *fileCfg.RateLimitBurst
+		}
+		if fileCfg.RateLimitInterval != nil {
+			if d, err := time.ParseDuration(*fileCfg.RateLimitInterval); err == nil {
+				serverCfg.Rate_Limit_Interval = d
+			}
+		}
 	}
 
 	// Override with explicitly set command-line flags
@@ -153,6 +168,10 @@ func main() {
 			serverCfg.Force_Set = *forceSet
 		case "address":
 			serverCfg.Address = *address
+		case "rate-limit-burst":
+			serverCfg.Rate_Limit_Burst = *rateLimitBurst
+		case "rate-limit-interval":
+			serverCfg.Rate_Limit_Interval = *rateLimitInterval
 		case "enable-pinger":
 			duplexCfg.EnablePinger = *enablePinger
 		case "ping-interval":

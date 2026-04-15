@@ -2,6 +2,7 @@ package server
 
 import (
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/snowflake"
 	"github.com/cloudlink-delta/duplex"
@@ -30,12 +31,15 @@ type SocketCodes struct {
 }
 
 var (
-	Generic_Error      = SocketCodes{4000, "Generic Error"}
-	Username_Error     = SocketCodes{4002, "Username Error"}
-	Overloaded_Status  = SocketCodes{4003, "Overloaded"}
-	Unavailable_Status = SocketCodes{4004, "Project Unavailable"}
-	Security_Error     = SocketCodes{4005, "Closed to protect your security"}
-	Identity_Error     = SocketCodes{4006, "Identify yourself"}
+	Generic_Error              = SocketCodes{4000, "Generic Error"}
+	Username_Error             = SocketCodes{4002, "Username Error"}
+	Overloaded_Status          = SocketCodes{4003, "Overloaded"}
+	Unavailable_Status         = SocketCodes{4004, "Project Unavailable"}
+	Security_Error             = SocketCodes{4005, "Closed to protect your security"}
+	Identity_Error             = SocketCodes{4006, "Identify yourself"}
+	Protocol_Detection_Failure = SocketCodes{4007, "Protocol detection failed"}
+	Protocol_Handler_Failure   = SocketCodes{4008, "Protocol handler failed"}
+	Ratelimit_Exceeded         = SocketCodes{4009, "Packet ratelimit has been exceeded"}
 )
 
 type Room struct {
@@ -82,6 +86,12 @@ type Config struct {
 
 	// Defines the listening address of the WebSocket bridge.
 	Address string
+
+	// Rate limiting: Maximum number of messages per interval.
+	Rate_Limit_Burst int
+
+	// Rate limiting: The interval at which the message count resets.
+	Rate_Limit_Interval time.Duration
 }
 
 type Server struct {
@@ -234,4 +244,8 @@ type BridgeClient struct {
 	dialect  uint
 	Protocol Protocol
 	Server   *Server
+
+	// Rate limiting
+	last_msg_time time.Time
+	msg_count     int
 }

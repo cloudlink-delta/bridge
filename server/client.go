@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gofiber/contrib/websocket"
 )
@@ -31,29 +32,55 @@ reader:
 				break reader
 			}
 		} else {
+			// Rate limit check
+			now := time.Now()
+			if c.last_msg_time.IsZero() {
+				c.last_msg_time = now
+			}
+			if now.Sub(c.last_msg_time) > c.Server.Config.Rate_Limit_Interval {
+				c.msg_count = 0
+				c.last_msg_time = now
+			}
+
+			c.msg_count++
+			if c.msg_count > c.Server.Config.Rate_Limit_Burst {
+				log.Printf("Client %s exceeded rate limit, disconnecting.", c.GiveName())
+				c.writer <- []byte("Your client has exceeded the ratelimit allowed by the server. Please reduce the messages that you send.")
+				c.Server.Respond_With_Code(c.Conn, Ratelimit_Exceeded)
+				c.exit <- true
+				break reader
+			}
+
 			switch msg_type {
 			case websocket.TextMessage:
 				switch p := c.Protocol.(type) {
 				case nil:
 					if p, ok := c.DetectAndReadProtocol(packet); !ok {
-						c.writer <- []byte("failed to detect protocol")
+						c.writer <- []byte("Failed to detect your client's protocol. Please try again later.")
+						c.Server.Respond_With_Code(c.Conn, Protocol_Detection_Failure)
 						c.exit <- true
 						break reader
 					} else {
 						c.Protocol = p
 					}
 				case *CL4_or_CL3:
-					p.Reader(c, packet)
+					go p.Reader(c, packet)
 				case *Scratch_Handler:
-					p.Reader(c, packet)
+					go p.Reader(c, packet)
 				case *CL2:
-					p.Reader(c, packet)
+					go p.Reader(c, packet)
 				default:
-					panic("unhandled protocol")
+					c.writer <- []byte("Failed to process your client's protocol. Please report this to the server administrator.")
+					c.Server.Respond_With_Code(c.Conn, Protocol_Handler_Failure)
+					c.exit <- true
+					break reader
 				}
 
 			default:
-				panic("unhandled message type")
+				c.writer <- []byte("You sent a packet that the server does not understand; This server only supports text frames.")
+				c.Server.Respond_With_Code(c.Conn, Generic_Error)
+				c.exit <- true
+				break reader
 			}
 		}
 
