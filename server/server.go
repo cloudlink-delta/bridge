@@ -153,17 +153,24 @@ func (s *Server) Unicast(c *BridgeClient, p any) {
 
 	msg, err := json.Marshal(patched)
 	if err != nil {
-		log.Fatalf("Failed to marshal packet: %v", err)
+		log.Fatalf("⚠️  Failed to marshal packet: %v", err)
 	}
 
 	if c.Conn == nil {
 		return
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("⚠️  Recovered from panic: %v", r)
+			// Ignore send on closed channel panics
+		}
+	}()
+
 	select {
 	case c.writer <- msg:
 	default:
-		log.Printf("Warning: Client %s buffer full, dropping message", c.ID)
+		log.Printf("⚠️  Client %s buffer full, dropping message", c.ID)
 	}
 }
 
@@ -178,12 +185,19 @@ func (s *Server) Broadcast(room RoomKey, p any, exclude ...*BridgeClient) {
 	})
 
 	// Verify the client hasn't been unsubscribed right before sending
+	var finalTargets BridgeClients
 	s.roomsMu.RLock()
-	defer s.roomsMu.RUnlock()
-	for _, client := range targets {
-		if r, ok := s.RoomsMap[room]; ok && r.Clients[client] {
-			s.Unicast(client, p)
+	if r, ok := s.RoomsMap[room]; ok {
+		for _, client := range targets {
+			if r.Clients[client] {
+				finalTargets = append(finalTargets, client)
+			}
 		}
+	}
+	s.roomsMu.RUnlock()
+
+	for _, client := range finalTargets {
+		s.Unicast(client, p)
 	}
 }
 
@@ -192,12 +206,19 @@ func (s *Server) Multicast(room RoomKey, p any, targets Targets) {
 		return
 	}
 
+	var finalTargets BridgeClients
 	s.roomsMu.RLock()
-	defer s.roomsMu.RUnlock()
-	for client := range targets {
-		if r, ok := s.RoomsMap[room]; ok && r.Clients[client] {
-			s.Unicast(client, p)
+	if r, ok := s.RoomsMap[room]; ok {
+		for client := range targets {
+			if r.Clients[client] {
+				finalTargets = append(finalTargets, client)
+			}
 		}
+	}
+	s.roomsMu.RUnlock()
+
+	for _, client := range finalTargets {
+		s.Unicast(client, p)
 	}
 }
 
