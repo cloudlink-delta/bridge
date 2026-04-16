@@ -260,10 +260,7 @@ func (s *Server) Unicast(c *BridgeClient, p Packet) {
 		}
 	}()
 
-	select {
-	case c.writer <- msg:
-	default:
-	}
+	s.safeSend(c, msg)
 }
 
 func (s *Server) Broadcast(room RoomKey, p Packet, exclude ...*BridgeClient) {
@@ -330,10 +327,7 @@ func (s *Server) multicast(p Packet, targets Targets) {
 			if target == nil || target.Conn == nil {
 				continue
 			}
-			select {
-			case target.writer <- msg:
-			default:
-			}
+			s.safeSend(target, msg)
 		}
 	}
 }
@@ -417,9 +411,24 @@ func (s *Server) Destroy_Client(c *BridgeClient) {
 	delete(s.ClassicClients, c)
 	s.classicclientsmu.Unlock()
 
-	close(c.writer)
+	select {
+	case c.exit <- true:
+	default:
+	}
 
 	s.ReportActiveConnections(false)
+}
+
+func (s *Server) safeSend(c *BridgeClient, msg []byte) {
+	defer func() {
+		recover() // Ignore panics from sending to a closed channel
+	}()
+
+	select {
+	case c.writer <- msg:
+	default:
+		// Channel full, drop packet (standard for WebSockets/Real-time)
+	}
 }
 
 func (s *Server) DoesRoomExist(room RoomKey) bool {

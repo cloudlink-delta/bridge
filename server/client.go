@@ -13,10 +13,17 @@ import (
 // It ensures only one goroutine ever writes to the connection at a time.
 func (c *BridgeClient) Writer() {
 	defer c.Conn.Close()
-	for p := range c.writer {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, p); err != nil {
-			log.Printf("%s ⚠️  Error writing to client: %v", c.GiveName(), err)
-			break
+	for {
+		select {
+		case msg, ok := <-c.writer:
+			if !ok {
+				return
+			}
+			if write_err := c.Conn.WriteMessage(websocket.TextMessage, msg); write_err != nil {
+				log.Printf("%s ⚠️  Error writing to client: %v", c.GiveName(), write_err)
+			}
+		case <-c.exit:
+			return // Stop the goroutine
 		}
 	}
 }
