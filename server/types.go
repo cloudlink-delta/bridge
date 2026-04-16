@@ -116,6 +116,9 @@ type Config struct {
 
 	// Rate limiting: The interval at which the message count resets.
 	Rate_Limit_Interval time.Duration
+
+	// Rate limiting: If enabled, this will kick a client if they exceed the rate limit. Otherwise, packets are dropped.
+	Kick_On_Rate_Limit bool
 }
 
 type Server struct {

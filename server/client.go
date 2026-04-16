@@ -42,12 +42,20 @@ reader:
 				}
 
 				c.msg_count++
-				if c.msg_count > c.Server.Config.Rate_Limit_Burst {
-					log.Printf("%s ⚠️  Aborting connection to client: Exceeded ratelimit.", c.GiveName())
-					c.writer <- []byte("Your client has exceeded the ratelimit allowed by the server. Please reduce the messages that you send.")
-					c.Server.Respond_With_Code(c.Conn, Ratelimit_Exceeded)
-					c.exit <- true
-					break reader
+
+				exceeded := c.msg_count > c.Server.Config.Rate_Limit_Burst
+
+				if exceeded {
+					if c.Server.Config.Kick_On_Rate_Limit {
+						log.Printf("%s ⚠️  Aborting connection to client: Exceeded ratelimit.", c.GiveName())
+						c.writer <- []byte("Your client has exceeded the ratelimit allowed by the server. Please reduce the messages that you send.")
+						c.Server.Respond_With_Code(c.Conn, Ratelimit_Exceeded)
+						c.exit <- true
+						break reader
+					} else {
+						// Silently drop new packets
+						continue
+					}
 				}
 			}
 

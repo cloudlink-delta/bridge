@@ -40,6 +40,7 @@ func main() {
 	enableRateLimit := flag.Bool("enable-rate-limit", true, "Enable rate limiting")
 	rateLimitBurst := flag.Int("rate-limit-burst", 50, "Maximum number of messages per interval for rate limiting")
 	rateLimitInterval := flag.Duration("rate-limit-interval", time.Second, "Interval for rate limiting")
+	kickOnRateLimit := flag.Bool("kick-on-rate-limit", false, "Kick clients that exceed the rate limit. Otherwise, packets are dropped.")
 
 	// Parse command-line flags
 	flag.Usage = func() {
@@ -62,6 +63,7 @@ func main() {
 		Enable_Rate_Limit:   true,
 		Rate_Limit_Burst:    50,
 		Rate_Limit_Interval: time.Second,
+		Kick_On_Rate_Limit:  false,
 	}
 	duplexCfg := duplex.Config{
 		PingInterval: 5000,
@@ -83,6 +85,9 @@ func main() {
 
 		var fileCfg struct {
 			Designation       *string            `json:"designation"`
+			EnablePinger      *bool              `json:"enable_pinger"`
+			PingInterval      *int64             `json:"ping_interval"`
+			VeryVerbose       *bool              `json:"very_verbose"`
 			EnableMOTD        *bool              `json:"enable_motd"`
 			MOTDMessage       *string            `json:"motd_message"`
 			ServeIPAddresses  *bool              `json:"serve_ip_addresses"`
@@ -97,6 +102,7 @@ func main() {
 			EnableRateLimit   *bool              `json:"enable_rate_limit"`
 			RateLimitBurst    *int               `json:"rate_limit_burst"`
 			RateLimitInterval *string            `json:"rate_limit_interval"`
+			KickOnRateLimit   *bool              `json:"kick_on_rate_limit"`
 		}
 
 		if err := json.Unmarshal(data, &fileCfg); err != nil {
@@ -153,6 +159,18 @@ func main() {
 				serverCfg.Rate_Limit_Interval = d
 			}
 		}
+		if fileCfg.KickOnRateLimit != nil {
+			serverCfg.Kick_On_Rate_Limit = *fileCfg.KickOnRateLimit
+		}
+		if fileCfg.EnablePinger != nil {
+			duplexCfg.EnablePinger = *fileCfg.EnablePinger
+		}
+		if fileCfg.PingInterval != nil {
+			duplexCfg.PingInterval = *fileCfg.PingInterval
+		}
+		if fileCfg.VeryVerbose != nil {
+			duplexCfg.VeryVerbose = *fileCfg.VeryVerbose
+		}
 	}
 
 	// Override with explicitly set command-line flags
@@ -180,6 +198,8 @@ func main() {
 			serverCfg.Rate_Limit_Burst = *rateLimitBurst
 		case "rate-limit-interval":
 			serverCfg.Rate_Limit_Interval = *rateLimitInterval
+		case "kick-on-rate-limit":
+			serverCfg.Kick_On_Rate_Limit = *kickOnRateLimit
 		case "enable-pinger":
 			duplexCfg.EnablePinger = *enablePinger
 		case "ping-interval":
