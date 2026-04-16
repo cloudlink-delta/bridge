@@ -327,6 +327,9 @@ func (s *Server) multicast(p Packet, targets Targets) {
 			continue
 		}
 		for _, target := range g_targets {
+			if target == nil || target.Conn == nil {
+				continue
+			}
 			select {
 			case target.writer <- msg:
 			default:
