@@ -67,8 +67,9 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		roomEvents:         make(chan RoomEvent, 1024),
 		snowflakeGen:       node,
 		App: fiber.New(fiber.Config{
-			JSONEncoder: json.Marshal,
-			JSONDecoder: json.Unmarshal,
+			JSONEncoder:   json.Marshal,
+			JSONDecoder:   json.Unmarshal,
+			StrictRouting: true,
 		}),
 	}
 
