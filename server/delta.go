@@ -165,15 +165,20 @@ func (s *Server) ConfigureDelta(designation string) {
 				Listener: packet.Listener,
 				TTL:      1,
 			},
+			Payload: rooms,
 		})
 		for _, room := range rooms {
 			s.Sync_Room_State(bc, room)
+
+			// Tell everyone that our peer has joined
 			s.Broadcast(room, &Common_Packet{
 				Command: "ulist",
 				Mode:    "add",
 				Value:   s.UserObject(bc),
 				Rooms:   room,
 			}, bc)
+
+			// Tell our peer about the existing members
 			s.Unicast(bc, &Common_Packet{
 				Command: "ulist",
 				Mode:    "set",
@@ -194,12 +199,22 @@ func (s *Server) ConfigureDelta(designation string) {
 
 		for _, room := range rooms {
 			s.Unsubscribe(bc, room)
+
+			// Tell existing peers we have left
 			s.Broadcast(room, &Common_Packet{
 				Command: "ulist",
 				Mode:    "remove",
 				Value:   s.UserObject(bc),
 				Rooms:   room,
 			}, bc)
+
+			// Tell our peer to forget each bridged client
+			s.Unicast(bc, &Common_Packet{
+				Command: "ulist",
+				Mode:    "set",
+				Value:   []string{},
+				Rooms:   room,
+			})
 		}
 
 		peer.Write(&duplex.TxPacket{
@@ -208,6 +223,7 @@ func (s *Server) ConfigureDelta(designation string) {
 				Listener: packet.Listener,
 				TTL:      1,
 			},
+			Payload: rooms,
 		})
 	})
 
