@@ -7,8 +7,8 @@ import (
 	"github.com/bwmarrin/snowflake"
 	"github.com/cloudlink-delta/duplex"
 	"github.com/goccy/go-json"
-	"github.com/gofiber/contrib/websocket"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/contrib/v3/websocket"
+	"github.com/gofiber/fiber/v3"
 	"github.com/kaptinlin/jsonschema"
 )
 
@@ -56,6 +56,7 @@ const (
 	OpJoinRoom RoomOp = iota
 	OpLeaveRoom
 	OpGetClients
+	OpGetTargets
 	OpDoesRoomExist
 	OpGetActiveRooms
 	OpCanAllocateNRooms
@@ -106,6 +107,9 @@ type Config struct {
 
 	// Defines the listening address of the WebSocket bridge.
 	Address string
+
+	// Rate limiting: Enables the rate limiter.
+	Enable_Rate_Limit bool
 
 	// Rate limiting: Maximum number of messages per interval.
 	Rate_Limit_Burst int
@@ -204,9 +208,10 @@ type CL2Packet struct {
 
 // CL2Packet_TxReply represents the outer structure for outgoing JSON responses.
 type CL2Packet_TxReply struct {
-	Type string `json:"type"`         // e.g., "gs", "ps", "sf", "ul"
-	Data any    `json:"data"`         // Can be string or nested CL2Packet_TxData
-	ID   string `json:"id,omitempty"` // Recipient ID for "ps" type
+	Type         string `json:"type"`         // e.g., "gs", "ps", "sf", "ul"
+	Data         any    `json:"data"`         // Can be string or nested CL2Packet_TxData
+	ID           string `json:"id,omitempty"` // Recipient ID for "ps" type
+	is_multicast bool   `json:"-"`
 }
 
 // CL2Packet_TxData represents the nested 'data' object for special feature responses.
@@ -268,4 +273,26 @@ type BridgeClient struct {
 	// Rate limiting
 	last_msg_time time.Time
 	msg_count     int
+}
+
+type Packet interface {
+	String() string
+}
+
+func (p *Common_Packet) Packet() Packet {
+	return p
+}
+
+func (p *ScratchPacket) Packet() Packet {
+	return p
+}
+
+func (p *CL2Packet) Packet() Packet {
+	return p
+}
+
+// Define a unique key for grouping
+type groupKey struct {
+	proto   Protocol
+	dialect uint
 }

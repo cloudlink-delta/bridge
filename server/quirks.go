@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/cloudlink-delta/duplex"
@@ -25,7 +24,6 @@ func (s *Scratch_Handler) Apply_Quirks(c *BridgeClient, p any) any {
 		return packet
 
 	case *CL2Packet:
-		log.Println("⁉️  CL2 -> Scratch translation not present")
 		return nil
 
 	case *Common_Packet:
@@ -37,11 +35,9 @@ func (s *Scratch_Handler) Apply_Quirks(c *BridgeClient, p any) any {
 				Value:  packet.Value,
 			}
 		}
-		log.Printf("⁉️  CL4/3 -> Scratch translation not present for opcode %s", packet.Command)
 		return nil // Silently drop ulist, gmsg, statuscodes, etc.
 
 	default:
-		log.Printf("⁉️  Scratch translation not present for unrecognized packet %v", packet)
 		return nil // Safely drop unrecognized packets instead of panicking
 	}
 }
@@ -135,7 +131,6 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 			}
 
 		default:
-			log.Printf("⁉️  CL4/3 -> CL2 translation not present for opcode %s", original.Command)
 			return nil
 		}
 
@@ -148,12 +143,10 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 				return nil
 			}
 		} else {
-			log.Printf("⁉️  Scratch -> CL2 translation not present for method %s", original.Method)
 			return nil
 		}
 
 	default:
-		log.Printf("⁉️  CL2 translation not present for unrecognized packet %v", p)
 		return nil
 	}
 
@@ -165,6 +158,7 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 
 	switch original_packet := p.(type) {
 	case *Common_Packet:
+
 		// Create a shallow copy of the packet so we don't mutate the
 		// broadcasted packet reference for other clients.
 		clone := *original_packet
@@ -178,6 +172,7 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 		}
 
 	case *ScratchPacket:
+
 		// Cross-protocol translation: Scratch -> CL4/CL3
 		if original_packet.Method == "set" || original_packet.Method == "create" {
 			packet = &Common_Packet{
@@ -187,13 +182,11 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 				Origin:  s.UserObject(c),
 			}
 		} else {
-			log.Printf("⁉️  Scratch -> CL3/4 translation not present for method %s", original_packet.Method)
 			return nil // Drop unmappable Scratch commands (like rename/delete)
 		}
 
 	default:
 		// Safely drop unrecognized packets instead of crashing the server
-		log.Printf("⁉️  CL3/4 translation not present for unrecognized packet %v", p)
 		return nil
 	}
 
@@ -215,14 +208,12 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 
 	// NOW WIPE THE ROOMS KEY FOR OLDER DIALECTS (MUST BE NIL FOR OMITEMPTY)
 	if packet.Rooms != "" && c.dialect < Dialect_CL4_0_1_8 {
-		log.Printf("%s 🔧 Applied Quirks: rooms context is not supported with dialects older than 0.1.8", c.GiveName())
 		packet.Rooms = "" // Room contexts not supported before 0.1.8
 	}
 
 	switch packet.Command {
 	case "statuscode":
 		if c.dialect < Dialect_CL3_0_1_7 {
-			log.Printf("%s 🔧 Applied Quirks: statuscode is not supported with dialects older than 0.1.7", c.GiveName())
 			return nil // Drop unsupported command
 		}
 
@@ -236,7 +227,6 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 				"data": packet.Value,
 			}
 			packet.Value = nil
-			log.Printf("%s 🔧 Applied Quirks: wrapping server_version with direct command for 0.1.5 dialect", c.GiveName())
 
 		case Dialect_CL3_0_1_7:
 			// CL3 0.1.7 expects nesting with 'val' inner key
@@ -245,13 +235,11 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 				"cmd": "vers",
 				"val": packet.Value,
 			}
-			log.Printf("%s 🔧 Applied Quirks: using vers with value for server_version command for 0.1.7 dialect", c.GiveName())
 		}
 
 	case "motd":
 		switch c.dialect {
 		case Dialect_CL3_0_1_5:
-			log.Printf("%s 🔧 Applied Quirks: MOTD is not supported on the 0.1.5 dialect", c.GiveName())
 			return nil // 0.1.5 does not support MOTD
 		case Dialect_CL3_0_1_7:
 			packet.Command = "direct"
@@ -259,19 +247,15 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 				"cmd": "motd",
 				"val": packet.Value,
 			}
-			log.Printf("%s 🔧 Applied Quirks: patching MOTD for 0.1.7 dialect", c.GiveName())
 		}
 
 	case "client_obj":
 		if c.dialect < Dialect_CL4_0_2_0 {
-			log.Printf("%s 🔧 Applied Quirks: client_obj is not supported with dialects older than 0.2.0", c.GiveName())
 			return nil // client_obj is a 0.2.0+ specific feature
 		}
 
 	case "ulist":
 		if c.dialect < Dialect_CL4_0_2_0 {
-			log.Printf("%s 🔧 Applied Quirks: patching ulist reply for dialects older than 0.2.0", c.GiveName())
-
 			if c.dialect < Dialect_CL4_0_1_8 {
 
 				// 0.1.5 and 0.1.7 DO NOT support differential updates.
@@ -320,7 +304,6 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 
 	case "gmsg", "gvar", "pmsg", "pvar", "direct", "linked_gmsg", "linked_pmsg":
 		if c.dialect < Dialect_CL4_0_1_8 {
-			log.Printf("%s 🔧 Applied Quirks: rooms context is not supported with dialects older than 0.1.8", c.GiveName())
 			packet.Rooms = nil // MUST be nil so `omitempty` removes the key completely!
 		}
 
@@ -332,10 +315,8 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 
 			if originObj, ok := packet.Origin.(*CL4_UserObject); ok {
 				if c.dialect == Dialect_CL3_0_1_7 {
-					log.Printf("%s 🔧 Applied Quirks: downgrading origin object to string for 0.1.7 dialect", c.GiveName())
 					packet.Origin = originObj.Username
 				} else {
-					log.Printf("%s 🔧 Applied Quirks: packet origin is not supported with 0.1.5", c.GiveName())
 					packet.Origin = nil // Not supported in 0.1.5
 				}
 			}

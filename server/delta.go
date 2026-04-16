@@ -240,7 +240,7 @@ func (s *Server) ConfigureDelta(designation string) {
 		}
 		for _, room := range rooms {
 			targets := s.Get_Client(packet.Target, room)
-			s.Multicast(room, p, targets)
+			s.Multicast(p, targets)
 		}
 	})
 
@@ -279,7 +279,7 @@ func (s *Server) ConfigureDelta(designation string) {
 		}
 		for _, room := range rooms {
 			targets := s.Get_Client(packet.Target, room)
-			s.Multicast(room, p, targets)
+			s.Multicast(p, targets)
 		}
 	})
 }

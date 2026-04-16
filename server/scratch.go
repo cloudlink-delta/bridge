@@ -1,8 +1,6 @@
 package server
 
 import (
-	"log"
-
 	"github.com/goccy/go-json"
 	"github.com/kaptinlin/jsonschema"
 )
@@ -74,8 +72,6 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 			return
 		}
 	}
-
-	log.Printf("%s 🢂  %s", client.GiveName(), p)
 
 	switch p.Method {
 	case "handshake":

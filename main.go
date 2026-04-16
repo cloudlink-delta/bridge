@@ -37,6 +37,7 @@ func main() {
 	maxClients := flag.Int("max-clients", 1000, "Maximum number of clients")
 	forceSet := flag.Bool("force-set", true, "Force the use of the `set` ulist mode for legacy CloudLink clients")
 	address := flag.String("address", "127.0.0.1:3000", "Legacy CloudLink listener address")
+	enableRateLimit := flag.Bool("enable-rate-limit", true, "Enable rate limiting")
 	rateLimitBurst := flag.Int("rate-limit-burst", 50, "Maximum number of messages per interval for rate limiting")
 	rateLimitInterval := flag.Duration("rate-limit-interval", time.Second, "Interval for rate limiting")
 
@@ -58,6 +59,7 @@ func main() {
 		Maximum_Clients:     1000,
 		Force_Set:           true,
 		Address:             "127.0.0.1:3000",
+		Enable_Rate_Limit:   true,
 		Rate_Limit_Burst:    50,
 		Rate_Limit_Interval: time.Second,
 	}
@@ -92,6 +94,7 @@ func main() {
 			SessionHostname   *string            `json:"session_hostname"`
 			SessionSecure     *bool              `json:"session_secure"`
 			SessionPort       *int               `json:"session_port"`
+			EnableRateLimit   *bool              `json:"enable_rate_limit"`
 			RateLimitBurst    *int               `json:"rate_limit_burst"`
 			RateLimitInterval *string            `json:"rate_limit_interval"`
 		}
@@ -139,6 +142,9 @@ func main() {
 			duplexCfg.Port = *fileCfg.SessionPort
 			sessionPortProvided = true
 		}
+		if fileCfg.EnableRateLimit != nil {
+			serverCfg.Enable_Rate_Limit = *fileCfg.EnableRateLimit
+		}
 		if fileCfg.RateLimitBurst != nil {
 			serverCfg.Rate_Limit_Burst = *fileCfg.RateLimitBurst
 		}
@@ -168,6 +174,8 @@ func main() {
 			serverCfg.Force_Set = *forceSet
 		case "address":
 			serverCfg.Address = *address
+		case "enable-rate-limit":
+			serverCfg.Enable_Rate_Limit = *enableRateLimit
 		case "rate-limit-burst":
 			serverCfg.Rate_Limit_Burst = *rateLimitBurst
 		case "rate-limit-interval":

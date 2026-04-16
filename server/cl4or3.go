@@ -91,8 +91,6 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 	}
 
-	log.Printf("%s 🢂  %v", client.GiveName(), p)
-
 	switch p.Command {
 
 	case "handshake":
@@ -202,7 +200,7 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 			targets := s.Get_Clients(room, p.ID)
 			if len(targets) > 0 {
 				anyResultsFound = true
-				s.Multicast(room, &Common_Packet{
+				s.Multicast(&Common_Packet{
 					Command: p.Command,
 					Value:   p.Value,
 					Name:    p.Name,
@@ -241,7 +239,7 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 			targets := s.Get_Clients(room, p.ID)
 			if len(targets) > 0 {
 				anyResultsFound = true
-				s.Multicast(room, &Common_Packet{
+				s.Multicast(&Common_Packet{
 					Command: "direct",
 					Value:   p.Value,
 					Origin:  originObj,
@@ -418,26 +416,6 @@ func (s CL4_or_CL3) Derive_Dialect(p *Common_Packet, c *BridgeClient) {
 // Helper to automatically change the dialect version of the client based on known first-packet behaviors
 func (p *CL4_or_CL3) Upgrade_Dialect(c *BridgeClient, newdialect uint) {
 	if newdialect > c.dialect {
-
-		var basestring string
-		if c.dialect == Dialect_Undefined {
-			basestring = fmt.Sprintf("%s 𝐢 Detected ", c.GiveName())
-		} else {
-			basestring = fmt.Sprintf("%s 𝐢 Upgraded to ", c.GiveName())
-		}
-
 		c.dialect = newdialect
-		switch c.dialect {
-		case Dialect_CL3_0_1_5:
-			log.Println(basestring + "CL3 dialect v0.1.5")
-		case Dialect_CL3_0_1_7:
-			log.Println(basestring + "CL3 dialect v0.1.7")
-		case Dialect_CL4_0_1_8:
-			log.Println(basestring + "CL4 dialect v0.1.8")
-		case Dialect_CL4_0_1_9:
-			log.Println(basestring + "CL4 dialect v0.1.9")
-		case Dialect_CL4_0_2_0:
-			log.Println(basestring + "CL4 dialect v0.2.0")
-		}
 	}
 }

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"regexp"
 	"strings"
@@ -167,8 +166,6 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		}
 	}
 
-	log.Printf("%s 🢂 <%s>", client.GiveName(), p.Command)
-
 	if client.dialect == Dialect_Undefined {
 		if p.Command == "sh" {
 			s.Upgrade_Dialect(client, Dialect_CL2_Late)
@@ -191,13 +188,11 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		s.linksMu.Lock()
 		s.links[client] = p.Recipient
 		s.linksMu.Unlock()
-		log.Printf("%s 🔗 Soft-linked to user ID: %s", client.GiveName(), p.Recipient)
 
 	case "rt": // Undo Soft Link
 		s.linksMu.Lock()
 		delete(s.links, client)
 		s.linksMu.Unlock()
-		log.Printf("%s 🔗 Removed soft-link", client.GiveName())
 
 	case "set", "sn":
 		if client.Username != nil && client.Username != "" {
@@ -240,7 +235,7 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 			return
 		}
 		targets := s.Get_Clients(DEFAULT_ROOM, p.Recipient)
-		s.Multicast(DEFAULT_ROOM, &Common_Packet{
+		s.Multicast(&Common_Packet{
 			Command: "pmsg",
 			Value:   p.Data,
 			Origin:  s.UserObject(client),
@@ -256,7 +251,7 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 
 			if exists && targetID != "" {
 				targets := s.Get_Clients(DEFAULT_ROOM, targetID)
-				s.Multicast(DEFAULT_ROOM, &Common_Packet{
+				s.Multicast(&Common_Packet{
 					Command: "linked_gmsg", // Internal cross-protocol command
 					Value:   p.Data,
 					Origin:  s.UserObject(client),
@@ -281,7 +276,7 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 
 			if exists && targetID != "" {
 				targets := s.Get_Clients(DEFAULT_ROOM, targetID)
-				s.Multicast(DEFAULT_ROOM, &Common_Packet{
+				s.Multicast(&Common_Packet{
 					Command: "gvar", // CL4 gvar naturally translates to CL2 `vm` mode `g`
 					Name:    p.Var,
 					Value:   p.Data,
@@ -300,14 +295,14 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		switch p.Mode {
 		case "0":
 			// Mode 0: Linked Private Data -> Multicast to Recipient
-			s.Multicast(DEFAULT_ROOM, &Common_Packet{
+			s.Multicast(&Common_Packet{
 				Command: "linked_pmsg", // Internal cross-protocol command
 				Value:   p.Data,
 				Origin:  s.UserObject(client),
 			}, targets)
 		case "1", "2":
 			// Mode 1 & 2: Private Var -> Multicast to Recipient
-			s.Multicast(DEFAULT_ROOM, &Common_Packet{
+			s.Multicast(&Common_Packet{
 				Command: "pvar", // CL4 pvar naturally translates to CL2 `vm` mode `p`
 				Name:    p.Var,
 				Value:   p.Data,
@@ -322,19 +317,6 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 
 func (s *CL2) Upgrade_Dialect(c *BridgeClient, newdialect uint) {
 	if newdialect > c.dialect {
-		var basestring string
-		if c.dialect == Dialect_Undefined {
-			basestring = fmt.Sprintf("%s 𝐢 Detected ", c.GiveName())
-		} else {
-			basestring = fmt.Sprintf("%s 𝐢 Upgraded to ", c.GiveName())
-		}
-
 		c.dialect = newdialect
-		switch c.dialect {
-		case Dialect_CL2_Early:
-			log.Println(basestring + "CL2 dialect (Early)")
-		case Dialect_CL2_Late:
-			log.Println(basestring + "CL2 dialect (Late)")
-		}
 	}
 }

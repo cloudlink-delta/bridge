@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofiber/contrib/websocket"
+	"github.com/gofiber/contrib/v3/websocket"
 )
 
 // Writer listens to the Sender channel and writes messages to the WebSocket.
@@ -14,7 +14,6 @@ import (
 func (c *BridgeClient) Writer() {
 	defer c.Conn.Close()
 	for p := range c.writer {
-		log.Printf("%s 🢀  %v", c.GiveName(), string(p))
 		if err := c.Conn.WriteMessage(websocket.TextMessage, p); err != nil {
 			log.Printf("%s ⚠️  Error writing to client: %v", c.GiveName(), err)
 			break
@@ -26,27 +25,30 @@ func (c *BridgeClient) Reader() {
 reader:
 	for {
 		if msg_type, packet, err := c.Conn.ReadMessage(); err != nil {
-			log.Printf("%s %v", c.GiveName(), err)
 			c.exit <- true
 			break reader
 		} else {
-			// Rate limit check
-			now := time.Now()
-			if c.last_msg_time.IsZero() {
-				c.last_msg_time = now
-			}
-			if now.Sub(c.last_msg_time) > c.Server.Config.Rate_Limit_Interval {
-				c.msg_count = 0
-				c.last_msg_time = now
-			}
 
-			c.msg_count++
-			if c.msg_count > c.Server.Config.Rate_Limit_Burst {
-				log.Printf("%s ⚠️  Rate limit exceeded, disconnecting.", c.GiveName())
-				c.writer <- []byte("Your client has exceeded the ratelimit allowed by the server. Please reduce the messages that you send.")
-				c.Server.Respond_With_Code(c.Conn, Ratelimit_Exceeded)
-				c.exit <- true
-				break reader
+			// Rate limit check
+			if c.Server.Config.Enable_Rate_Limit {
+
+				now := time.Now()
+				if c.last_msg_time.IsZero() {
+					c.last_msg_time = now
+				}
+				if now.Sub(c.last_msg_time) > c.Server.Config.Rate_Limit_Interval {
+					c.msg_count = 0
+					c.last_msg_time = now
+				}
+
+				c.msg_count++
+				if c.msg_count > c.Server.Config.Rate_Limit_Burst {
+					log.Printf("%s ⚠️  Aborting connection to client: Exceeded ratelimit.", c.GiveName())
+					c.writer <- []byte("Your client has exceeded the ratelimit allowed by the server. Please reduce the messages that you send.")
+					c.Server.Respond_With_Code(c.Conn, Ratelimit_Exceeded)
+					c.exit <- true
+					break reader
+				}
 			}
 
 			switch msg_type {
@@ -54,6 +56,7 @@ reader:
 				switch p := c.Protocol.(type) {
 				case nil:
 					if p, ok := c.DetectAndReadProtocol(packet); !ok {
+						log.Printf("%s ⚠️  Aborting connection to client: Failed to identify protocol.", c.GiveName())
 						c.writer <- []byte("Failed to detect your client's protocol. Please try again later.")
 						c.Server.Respond_With_Code(c.Conn, Protocol_Detection_Failure)
 						c.exit <- true
@@ -68,6 +71,7 @@ reader:
 				case *CL2:
 					go p.Reader(c, packet)
 				default:
+					log.Printf("%s ⚠️  Aborting connection to client: Failed to process client protocol.", c.GiveName())
 					c.writer <- []byte("Failed to process your client's protocol. Please report this to the server administrator.")
 					c.Server.Respond_With_Code(c.Conn, Protocol_Handler_Failure)
 					c.exit <- true
@@ -75,6 +79,7 @@ reader:
 				}
 
 			default:
+				log.Printf("%s ⚠️  Aborting connection to client: Unsupported WebSocket frame type.", c.GiveName())
 				c.writer <- []byte("You sent a packet that the server does not understand; This server only supports text frames.")
 				c.Server.Respond_With_Code(c.Conn, Generic_Error)
 				c.exit <- true
@@ -109,7 +114,6 @@ func (c *BridgeClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
 			defer wg.Done()
 			p := New_CL4_or_CL3(c.Server)
 			if p.Reader(c, data) {
-				log.Printf("%s 𝐢 CL3 or CL4 protocol detected", c.GiveName())
 				c.Protocol = p
 				resultCh <- p
 			}
@@ -118,7 +122,6 @@ func (c *BridgeClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
 			defer wg.Done()
 			p := New_Scratch(c.Server)
 			if p.Reader(c, data) {
-				log.Printf("%s 𝐢 Scratch protocol detected", c.GiveName())
 				c.Protocol = p
 				resultCh <- p
 			}
@@ -127,7 +130,6 @@ func (c *BridgeClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
 			defer wg.Done()
 			p := New_CL2(c.Server)
 			if p.Reader(c, data) {
-				log.Printf("%s 𝐢 CL2 protocol detected", c.GiveName())
 				c.Protocol = p
 				resultCh <- p
 			}

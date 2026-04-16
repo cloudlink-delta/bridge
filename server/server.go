@@ -9,8 +9,9 @@ import (
 	"github.com/bwmarrin/snowflake"
 	"github.com/cloudlink-delta/duplex"
 	"github.com/goccy/go-json"
-	"github.com/gofiber/contrib/websocket"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/contrib/monitor"
+	"github.com/gofiber/contrib/v3/websocket"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 )
 
@@ -72,16 +73,18 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	}
 
 	// Configure Health endpoint
-	server.App.Get("/health", func(c *fiber.Ctx) error {
+	server.App.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":         server.instance.GetPeerState(),
 			"active_clients": server.ReportActiveConnections(true),
-			"active_rooms":   server.ReportActiveRooms(true),
+			"active_rooms":   server.ReportActiveRooms(),
 		})
 	})
 
+	server.App.Get("/metrics", monitor.New())
+
 	// Configure CL2 / CL3 / CL4 / Scratch CloudVars Gateway
-	server.App.Use("/", func(c *fiber.Ctx) error {
+	server.App.Use("/", func(c fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true)
 			return c.Next()
@@ -138,9 +141,6 @@ func (s *Server) RoomManager() {
 		switch event.Op {
 		case OpJoinRoom:
 			r, exists := s.RoomsMap[event.Room]
-			if event.Room == DEFAULT_ROOM {
-				log.Printf("%s 🚪 Joining default room", event.Client.GiveName())
-			}
 			if !exists {
 				log.Printf("%s 🚪 Creating room %s", event.Client.GiveName(), event.Room)
 				r = &Room{Clients: make(Targets)}
@@ -164,6 +164,15 @@ func (s *Server) RoomManager() {
 				}
 			}
 			event.Respond <- clients
+		case OpGetTargets:
+			var targets Targets
+			if r, exists := s.RoomsMap[event.Room]; exists {
+				targets = make(Targets)
+				for c := range r.Clients {
+					targets[c] = true
+				}
+			}
+			event.Respond <- targets
 		case OpDoesRoomExist:
 			_, exists := s.RoomsMap[event.Room]
 			event.Respond <- exists
@@ -200,23 +209,38 @@ func (s *Server) Copy_Clients(room RoomKey) BridgeClients {
 	return (<-resp).(BridgeClients)
 }
 
-func (s *Server) Unicast(c *BridgeClient, p any) {
+func (s *Server) Get_Targets(room RoomKey) Targets {
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpGetTargets, Room: room, Respond: resp}
+	return (<-resp).(Targets)
+}
+
+func (c *BridgeClients) Targets() Targets {
+	targets := make(Targets)
+	for _, client := range *c {
+		targets[client] = true
+	}
+	return targets
+}
+
+func (s *Server) Unicast(c *BridgeClient, p Packet) {
 	if c == nil || c.Protocol == nil {
 		return
 	}
 
-	// log.Printf("[⁉️  Quirks] Applying quirks for %T %v (origin: %s)", p, p, c.GiveName())
+	// Apply translation / quirks
 	patched := c.Protocol.Apply_Quirks(c, p)
 	if patched == nil {
-		// log.Printf("[⁉️  Quirks] Nil packet returned for %T %v (origin: %s)", p, p, c.GiveName())
 		return
 	}
 
+	// Marshal the packet
 	msg, err := json.Marshal(patched)
 	if err != nil {
 		log.Fatalf("⚠️  Failed to marshal packet: %v", err)
 	}
 
+	// Abort if the client somehow turned nil
 	if c.Conn == nil {
 		return
 	}
@@ -239,40 +263,75 @@ func (s *Server) Unicast(c *BridgeClient, p any) {
 	select {
 	case c.writer <- msg:
 	default:
-		log.Printf("⚠️  Client %s buffer full, dropping message", c.ID)
 	}
 }
 
-func (s *Server) Broadcast(room RoomKey, p any, exclude ...*BridgeClient) {
-	targets := s.Copy_Clients(room)
+func (s *Server) Broadcast(room RoomKey, p Packet, exclude ...*BridgeClient) {
+	if p == nil {
+		return
+	}
+
+	targets := s.Get_Targets(room)
 	if len(targets) == 0 {
 		return
 	}
 
-	targets = slices.DeleteFunc(targets, func(c *BridgeClient) bool {
-		return slices.Contains(exclude, c)
-	})
-
-	for _, client := range targets {
-		s.Unicast(client, p)
+	// Filter out targets
+	for _, client := range exclude {
+		delete(targets, client)
 	}
+
+	s.multicast(p, targets)
 }
 
-func (s *Server) Multicast(room RoomKey, p any, targets Targets) {
+func (s *Server) Multicast(p Packet, targets Targets) {
+	if p == nil {
+		return
+	}
+
 	if len(targets) == 0 {
 		return
 	}
 
-	roomClients := s.Copy_Clients(room)
-	validTargets := make(BridgeClients, 0, len(targets))
-	for _, c := range roomClients {
-		if targets[c] {
-			validTargets = append(validTargets, c)
+	s.multicast(p, targets)
+}
+
+func (s *Server) multicast(p Packet, targets Targets) {
+	if p == nil || len(targets) == 0 {
+		return
+	}
+
+	groups := make(map[groupKey][]*BridgeClient)
+	for target := range targets {
+		if target.Protocol == nil {
+			continue
 		}
+		key := groupKey{target.Protocol, target.dialect}
+		groups[key] = append(groups[key], target)
 	}
 
-	for _, client := range validTargets {
-		s.Unicast(client, p)
+	for key, g_targets := range groups {
+		var representative *BridgeClient
+		if len(g_targets) > 0 {
+			representative = g_targets[0]
+		}
+
+		patched := key.proto.Apply_Quirks(representative, p)
+		if patched == nil {
+			continue
+		}
+
+		msg, err := json.Marshal(patched)
+		if err != nil {
+			log.Printf("⚠️  Failed to marshal packet: %v", err)
+			continue
+		}
+		for _, target := range g_targets {
+			select {
+			case target.writer <- msg:
+			default:
+			}
+		}
 	}
 }
 
@@ -374,8 +433,6 @@ func (s *Server) Subscribe(client *BridgeClient, room RoomKey) {
 	if !slices.Contains(client.Rooms, room) {
 		client.Rooms = append(client.Rooms, room)
 	}
-
-	s.ReportActiveRooms(false)
 }
 
 func (s *Server) Unsubscribe(client *BridgeClient, room RoomKey) {
@@ -386,21 +443,16 @@ func (s *Server) Unsubscribe(client *BridgeClient, room RoomKey) {
 	client.Rooms = slices.DeleteFunc(client.Rooms, func(rk RoomKey) bool {
 		return rk == room
 	})
-
-	s.ReportActiveRooms(false)
 }
 
 func (*Server) Respond_With_Code(c *websocket.Conn, code SocketCodes) error {
 	return c.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(int(code.Code), code.Message), time.Now().Add(time.Second))
 }
 
-func (s *Server) ReportActiveRooms(silent bool) int {
+func (s *Server) ReportActiveRooms() int {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpGetActiveRooms, Respond: resp}
 	rooms_open := (<-resp).(int)
-	if !silent {
-		log.Printf("🚪 There are %v room(s) active.", rooms_open)
-	}
 	return rooms_open
 }
 
@@ -412,11 +464,6 @@ func (s *Server) ReportActiveConnections(silent bool) int {
 		log.Printf("🔌 There are %v connection(s) active.", active_connections)
 	}
 	return active_connections
-}
-
-func (s *Server) DisplayStatus() {
-	s.ReportActiveConnections(false)
-	s.ReportActiveRooms(false)
 }
 
 // CanAllocateNRooms checks if the current room count + n doesn't exceed the limit.
