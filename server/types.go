@@ -122,20 +122,21 @@ type Config struct {
 }
 
 type Server struct {
-	Self               string
-	Close              chan bool
-	Done               chan bool
-	Config             *Config
-	instance           *duplex.Instance
-	deltaclientsmu     sync.RWMutex
-	ClassicClients     Targets
-	classicclientsmu   sync.RWMutex
-	RoomsMap           map[RoomKey]*Room // Replaces clients map
-	roomEvents         chan RoomEvent    // Replaces roomsMu
-	snowflakeGen       *snowflake.Node
-	App                *fiber.App
-	Address            string
-	DeltaResolverCache map[*duplex.Peer]HelloArgs
+	Self                  string
+	Close                 chan bool
+	Done                  chan bool
+	Config                *Config
+	instance              *duplex.Instance
+	deltaclientsmu        sync.RWMutex
+	ClassicClients        Targets
+	classicclientsmu      sync.RWMutex
+	RoomsMap              map[RoomKey]*Room // Replaces clients map
+	roomEvents            chan RoomEvent    // Replaces roomsMu
+	snowflakeGen          *snowflake.Node
+	App                   *fiber.App
+	Address               string
+	DeltaResolverCache    map[*duplex.Peer]HelloArgs
+	Predisposed_Instances []string
 }
 
 type CLDelta struct {

@@ -22,6 +22,11 @@ func (s *Server) ConfigureDelta(designation string) {
 		log.Printf("Attempting to connect to discovery server (discovery@%s)...", designation)
 		i.Connect("discovery@" + designation)
 
+		// Establish a connection to every predisposed instance.
+		for _, instance := range s.Predisposed_Instances {
+			i.Connect(instance)
+		}
+
 	}
 
 	i.OnDiscoveryConnected = func(peer *duplex.Peer) {
