@@ -196,10 +196,10 @@ func (s *Server) ConfigureDelta(designation string) {
 			s.Unsubscribe(bc, room)
 			s.Broadcast(room, &Common_Packet{
 				Command: "ulist",
-				Mode:    "set",
+				Mode:    "remove",
 				Value:   s.UserObject(bc),
 				Rooms:   room,
-			})
+			}, bc)
 		}
 
 		peer.Write(&duplex.TxPacket{
