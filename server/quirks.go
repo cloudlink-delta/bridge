@@ -401,7 +401,7 @@ func (d *CLDelta) Apply_Quirks(c *BridgeClient, p any) any {
 			users := make([]QueryAck, 0)
 
 			switch packet.Mode {
-			case "set":
+			case "set", "delete":
 				if userList, ok := packet.Value.([]*CL4_UserObject); ok {
 					for _, u := range userList {
 						if u.Username == nil || u.Username == "" || u.UUID == c.UUID {

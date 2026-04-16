@@ -211,8 +211,8 @@ func (s *Server) ConfigureDelta(designation string) {
 			// Tell our peer to forget each bridged client
 			s.Unicast(bc, &Common_Packet{
 				Command: "ulist",
-				Mode:    "set",
-				Value:   []string{},
+				Mode:    "delete",
+				Value:   s.Get_User_List(room),
 				Rooms:   room,
 			})
 		}
