@@ -326,7 +326,6 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 
 		for _, room := range roomsToUnlink {
-			log.Println("Unlinking from room", room)
 			s.Unsubscribe(client, room)
 			s.Broadcast(room, &Common_Packet{
 				Command: "ulist",
