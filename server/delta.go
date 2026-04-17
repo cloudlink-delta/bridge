@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
@@ -19,7 +18,7 @@ func (s *Server) ConfigureDelta(designation string) {
 	i.OnCreate = func() {
 
 		// Attempt to connect to the discovery server
-		log.Printf("Attempting to connect to discovery server (discovery@%s)...", designation)
+		s.Logger.Info().Msgf("Attempting to connect to discovery@%s...", designation)
 		i.Connect("discovery@" + designation)
 
 		// Establish a connection to every predisposed instance.
@@ -39,18 +38,17 @@ func (s *Server) ConfigureDelta(designation string) {
 			Designation: designation,
 		}
 
-		log.Printf("Discovery services connected as %s", peer.GetPeerID())
 		reply := peer.WaitForMatchedPacket("AUTO_REGISTER", "VIOLATION")
 		switch reply.Opcode {
 		case "AUTO_REGISTER":
-			log.Printf("Automatically registered on %s successfully!", peer.GetPeerID())
+			s.Logger.Info().Msgf("Automatically registered on %s successfully!", peer.GetPeerID())
 		case "VIOLATION":
 			// The protocol mandates that VIOLATION messages have a string payload. This should never panic unless something's very wrong.
 			var message string
 			if err := json.Unmarshal(reply.Payload, &message); err != nil {
 				panic(err)
 			}
-			log.Printf("Failed to auto-register on %s: %v", peer.GetPeerID(), message)
+			s.Logger.Error().Msgf("Failed to auto-register on %s: %v", peer.GetPeerID(), message)
 		}
 	}
 
@@ -90,7 +88,7 @@ func (s *Server) ConfigureDelta(designation string) {
 	i.Bind("HELLO", func(peer *duplex.Peer, packet *duplex.RxPacket) {
 		var args HelloArgs
 		if err := json.Unmarshal(packet.Payload, &args); err != nil {
-			log.Printf("WARN: peer %s malformed HELLO: %v", peer.GetPeerID(), err)
+			s.Logger.Warn().Msgf("peer %s malformed HELLO: %v", peer.GetPeerID(), err)
 			return
 		}
 
@@ -121,7 +119,7 @@ func (s *Server) ConfigureDelta(designation string) {
 			return
 		}
 
-		log.Println("QUERY:", query)
+		i.Logger.Debug().Msgf("QUERY: %s", query)
 
 		matches := queryRegex.FindStringSubmatch(query)
 		if matches == nil {
@@ -427,7 +425,7 @@ func (i *Server) Resolve_Peer(username string, peer *duplex.Peer, packet *duplex
 	}
 
 	if len(targets) > 1 {
-		log.Printf("WARN: resolver found more than 1 client for a single query: %s", username)
+		i.Logger.Warn().Msgf("resolver found more than 1 client for a single query: %s", username)
 	}
 
 	var instanceID string
@@ -482,10 +480,10 @@ func (i *Server) Get_Client(query string, room RoomKey) Targets {
 		return make(Targets)
 	}
 
-	log.Printf("Locally resolving classic client %s in %s", username, room)
+	i.Logger.Debug().Msgf("Locally resolving classic client %s in %s", username, room)
 
 	if username == i.Self {
-		log.Printf("Local resolve classic client %s in %s returns no match (prefetch)", username, room)
+		i.Logger.Debug().Msgf("Local resolve classic client %s in %s returns no match (prefetch)", username, room)
 		return make(Targets)
 	}
 
@@ -496,7 +494,7 @@ func (i *Server) Get_Client(query string, room RoomKey) Targets {
 	// Find
 	targets := i.Get_Clients(room, username)
 
-	log.Printf("Local resolve classic client %s in %s returns %d instances", username, room, len(targets))
+	i.Logger.Debug().Msgf("Local resolve classic client %s in %s returns %d instances", username, room, len(targets))
 	return targets
 }
 

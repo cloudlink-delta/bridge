@@ -1,7 +1,7 @@
 package server
 
 import (
-	"log"
+	"os"
 	"slices"
 	"sync"
 	"time"
@@ -13,9 +13,10 @@ import (
 	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 )
 
-func New(designation string, server_config *Config, duplex_config *duplex.Config) *Server {
+func New(server_config *Config, duplex_config *duplex.Config) *Server {
 	node, err := snowflake.NewNode(1)
 	if err != nil {
 		panic(err)
@@ -25,7 +26,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		panic("config required")
 	}
 
-	if !server_config.Standalone_Mode && designation == "" {
+	if !server_config.Standalone_Mode && server_config.Designation == "" {
 		panic("designation required")
 	}
 
@@ -49,7 +50,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		server_config.Address = ":3000"
 	}
 
-	self := "bridge@" + designation
+	self := "bridge@" + server_config.Designation
 
 	// Create bridge manager
 	server := &Server{
@@ -69,11 +70,13 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		}),
 	}
 
+	server.Logger = server.default_logger(server_config.Log_Level)
+
 	// Create instance
 	if !server_config.Standalone_Mode {
-		instance := duplex.New(self, duplex_config)
-		instance.IsBridge = true
-		server.instance = instance
+		i := duplex.New(self, duplex_config)
+		i.IsBridge = true
+		server.instance = i
 	}
 
 	// Configure Health endpoint
@@ -102,10 +105,18 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 
 	// Configure Delta Peer
 	if !server_config.Standalone_Mode {
-		server.ConfigureDelta(designation)
+		server.ConfigureDelta(server_config.Designation)
 	}
 
 	return server
+}
+
+func (i *Server) default_logger(level zerolog.Level) *zerolog.Logger {
+	// Configure zerolog
+	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
+	logger := zerolog.New(output).With().Timestamp().Logger().Level(level)
+	logger = logger.With().Str("instance", i.Self).Logger()
+	return &logger
 }
 
 func (s *Server) Run() {
@@ -120,7 +131,7 @@ func (s *Server) Run() {
 	go func() {
 		defer wg.Done()
 		if err := s.App.Listen(s.Config.Address); err != nil {
-			log.Printf("Fiber app error: %v", err)
+			s.Logger.Fatal().Msgf("Fiber app error: %v", err)
 		}
 	}()
 
@@ -153,7 +164,7 @@ func (s *Server) RoomManager() {
 		case OpJoinRoom:
 			r, exists := s.RoomsMap[event.Room]
 			if !exists {
-				log.Printf("%s 🚪 Creating room %s", event.Client.GiveName(), event.Room)
+				s.Logger.Info().Msgf("%s 🚪 Creating room %s", event.Client.GiveName(), event.Room)
 				r = &Room{Clients: make(Targets)}
 				s.RoomsMap[event.Room] = r
 			}
@@ -163,7 +174,7 @@ func (s *Server) RoomManager() {
 				delete(r.Clients, event.Client)
 				if len(r.Clients) == 0 {
 					delete(s.RoomsMap, event.Room)
-					log.Printf("%s 🚪 Destroying vacant room %s", event.Client.GiveName(), event.Room)
+					s.Logger.Info().Msgf("%s 🚪 Destroying vacant room %s", event.Client.GiveName(), event.Room)
 				}
 			}
 		case OpGetClients:
@@ -248,7 +259,8 @@ func (s *Server) Unicast(c *BridgeClient, p Packet) {
 	// Marshal the packet
 	msg, err := json.Marshal(patched)
 	if err != nil {
-		log.Fatalf("⚠️  Failed to marshal packet: %v", err)
+		s.Logger.Error().Msgf("⚠️  Failed to marshal packet: %v", err)
+		return
 	}
 
 	// Abort if the client somehow turned nil
@@ -266,7 +278,7 @@ func (s *Server) Unicast(c *BridgeClient, p Packet) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("⚠️  Recovered from panic: %v", r)
+			s.Logger.Warn().Msgf("⚠️  Recovered from panic: %v", r)
 			// Ignore send on closed channel panics
 		}
 	}()
@@ -331,7 +343,7 @@ func (s *Server) multicast(p Packet, targets Targets) {
 
 		msg, err := json.Marshal(patched)
 		if err != nil {
-			log.Printf("⚠️  Failed to marshal packet: %v", err)
+			s.Logger.Error().Msgf("⚠️  Failed to marshal packet: %v", err)
 			continue
 		}
 		for _, target := range g_targets {
@@ -484,7 +496,7 @@ func (s *Server) ReportActiveConnections(silent bool) int {
 	active_connections := len(s.ClassicClients)
 	s.classicclientsmu.RUnlock()
 	if !silent {
-		log.Printf("🔌 There are %v connection(s) active.", active_connections)
+		s.Logger.Info().Msgf("🔌 There are %v connection(s) active.", active_connections)
 	}
 	return active_connections
 }

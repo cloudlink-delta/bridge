@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -20,7 +19,7 @@ func (c *BridgeClient) Writer() {
 				return
 			}
 			if write_err := c.Conn.WriteMessage(websocket.TextMessage, msg); write_err != nil {
-				log.Printf("%s ⚠️  Error writing to client: %v", c.GiveName(), write_err)
+				c.Server.Logger.Error().Msgf("%s ⚠️  Error writing to client: %v", c.GiveName(), write_err)
 			}
 		case <-c.exit:
 			return // Stop the goroutine
@@ -54,7 +53,7 @@ reader:
 
 				if exceeded {
 					if c.Server.Config.Kick_On_Rate_Limit {
-						log.Printf("%s ⚠️  Aborting connection to client: Exceeded ratelimit.", c.GiveName())
+						c.Server.Logger.Error().Msgf("%s ⚠️  Aborting connection to client: Exceeded ratelimit.", c.GiveName())
 						c.writer <- []byte("Your client has exceeded the ratelimit allowed by the server. Please reduce the messages that you send.")
 						c.Server.Respond_With_Code(c.Conn, Ratelimit_Exceeded)
 						c.exit <- true
@@ -71,7 +70,7 @@ reader:
 				switch p := c.Protocol.(type) {
 				case nil:
 					if p, ok := c.DetectAndReadProtocol(packet); !ok {
-						log.Printf("%s ⚠️  Aborting connection to client: Failed to identify protocol.", c.GiveName())
+						c.Server.Logger.Error().Msgf("%s ⚠️  Aborting connection to client: Failed to identify protocol.", c.GiveName())
 						c.writer <- []byte("Failed to detect your client's protocol. Please try again later.")
 						c.Server.Respond_With_Code(c.Conn, Protocol_Detection_Failure)
 						c.exit <- true
@@ -86,7 +85,7 @@ reader:
 				case *CL2:
 					go p.Reader(c, packet)
 				default:
-					log.Printf("%s ⚠️  Aborting connection to client: Failed to process client protocol.", c.GiveName())
+					c.Server.Logger.Error().Msgf("%s ⚠️  Aborting connection to client: Failed to process client protocol.", c.GiveName())
 					c.writer <- []byte("Failed to process your client's protocol. Please report this to the server administrator.")
 					c.Server.Respond_With_Code(c.Conn, Protocol_Handler_Failure)
 					c.exit <- true
@@ -94,7 +93,7 @@ reader:
 				}
 
 			default:
-				log.Printf("%s ⚠️  Aborting connection to client: Unsupported WebSocket frame type.", c.GiveName())
+				c.Server.Logger.Error().Msgf("%s ⚠️  Aborting connection to client: Unsupported WebSocket frame type.", c.GiveName())
 				c.writer <- []byte("You sent a packet that the server does not understand; This server only supports text frames.")
 				c.Server.Respond_With_Code(c.Conn, Generic_Error)
 				c.exit <- true
@@ -167,6 +166,6 @@ func (c *BridgeClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
 	}
 
 	// No valid protocol detected
-	log.Println("No valid protocol detected")
+	c.Server.Logger.Debug().Msgf("No valid protocol detected")
 	return nil, false
 }

@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/goccy/go-json"
 	"github.com/kaptinlin/jsonschema"
@@ -44,27 +43,27 @@ func (s CL4_or_CL3) On_Disconnect(c *BridgeClient, rooms RoomKeys) { // (And Scr
 func (s CL4_or_CL3) Reader(client *BridgeClient, data []byte) bool {
 	// Check if the data is even remotely usable
 	if !json.Valid(data) {
-		log.Println("CL4/CL3 Reader: Invalid JSON received")
+		s.Logger.Error().Msg("CL4/CL3 Reader: Invalid JSON received")
 		return false
 	}
 
 	// Schema validation
 	result := s.Schema.Validate(data)
 	if !result.IsValid() {
-		log.Printf("CL4/CL3 Packet failed schema validation: %v", result)
+		s.Logger.Error().Msgf("CL4/CL3 Packet failed schema validation: %v", result)
 		return false
 	}
 
 	// Unmarshal into the struct
 	var p *Common_Packet
 	if err := json.Unmarshal(data, &p); err != nil {
-		log.Printf("CL4/CL3 JSON Unmarshal Error: %s", err)
+		s.Logger.Error().Msgf("CL4/CL3 JSON Unmarshal Error: %s", err)
 		return false
 	}
 
 	// Basic check: Command must exist
 	if p.Command == "" {
-		log.Println("CL4/CL3 Reader: Packet missing required 'cmd' field")
+		s.Logger.Error().Msg("CL4/CL3 Reader: Packet missing required 'cmd' field")
 		return false
 	}
 

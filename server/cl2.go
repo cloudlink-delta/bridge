@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log"
 	"regexp"
 	"strings"
 	"sync"
@@ -144,7 +143,7 @@ func (s *CL2) Reader(client *BridgeClient, data []byte) bool {
 	}
 
 	if !parsed {
-		log.Printf("Failed to parse CL2 packet: %s", message)
+		s.Logger.Error().Msgf("Failed to parse CL2 packet: %s", message)
 		return false
 	}
 

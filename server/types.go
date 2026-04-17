@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 	"github.com/kaptinlin/jsonschema"
+	"github.com/rs/zerolog"
 )
 
 const DEFAULT_ROOM RoomKey = "default"
@@ -84,6 +85,7 @@ type Protocol interface {
 }
 
 type Config struct {
+	Designation string
 
 	// Enables the Message of the Day. Will be shared with compatible clients.
 	Enable_MOTD bool
@@ -122,10 +124,14 @@ type Config struct {
 
 	// If enabled, the server will only provide the classic Clients server, and won't create or use the Delta protocol.
 	Standalone_Mode bool
+
+	// Defines the logging level that the server will use.
+	Log_Level zerolog.Level
 }
 
 type Server struct {
 	Self                  string
+	Logger                *zerolog.Logger
 	Close                 chan bool
 	Done                  chan bool
 	Config                *Config
