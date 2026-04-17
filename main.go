@@ -233,7 +233,7 @@ func main() {
 	})
 
 	// Verify loaded configuration
-	if designation == "" {
+	if !serverCfg.Standalone_Mode && designation == "" {
 		log.Fatal("A designation is required. Please provide it via -designation or in a config.json file. See --help for more information.")
 	}
 	if sessionHostnameProvided {

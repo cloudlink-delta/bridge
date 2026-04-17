@@ -21,12 +21,12 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		panic(err)
 	}
 
-	if designation == "" {
-		panic("designation required")
-	}
-
 	if server_config == nil {
 		panic("config required")
+	}
+
+	if !server_config.Standalone_Mode && designation == "" {
+		panic("designation required")
 	}
 
 	if server_config.Maximum_Rooms <= 0 {
