@@ -137,11 +137,8 @@ func (s *Server) Run() {
 
 	// Shutdown components
 	_ = s.App.Shutdown()
-
-	if !s.Config.Standalone_Mode {
-		s.instance.Close <- true
-		<-s.instance.Done
-	}
+	s.instance.Close <- true
+	<-s.instance.Done
 
 	wg.Wait() // Wait for both apps to finish
 	s.Done <- true
