@@ -19,6 +19,7 @@ func main() {
 	// CLI flags
 	configFile := flag.String("config", "", "Path to JSON configuration file")
 	designationFlag := flag.String("designation", "", "Globally unique designation (required)")
+	standaloneMode := flag.Bool("standalone", false, "Run in standalone mode (Only run the classic Clients server)")
 
 	// Duplex lib flags
 	enablePinger := flag.Bool("enable-pinger", false, "Enable ping/pong keepalive")
@@ -64,6 +65,7 @@ func main() {
 		Rate_Limit_Burst:    50,
 		Rate_Limit_Interval: time.Second,
 		Kick_On_Rate_Limit:  false,
+		Standalone_Mode:     false,
 	}
 	duplexCfg := duplex.Config{
 		PingInterval: 5000,
@@ -103,6 +105,7 @@ func main() {
 			RateLimitBurst    *int               `json:"rate_limit_burst"`
 			RateLimitInterval *string            `json:"rate_limit_interval"`
 			KickOnRateLimit   *bool              `json:"kick_on_rate_limit"`
+			StandaloneMode    *bool              `json:"standalone_mode"`
 		}
 
 		if err := json.Unmarshal(data, &fileCfg); err != nil {
@@ -171,6 +174,9 @@ func main() {
 		if fileCfg.VeryVerbose != nil {
 			duplexCfg.VeryVerbose = *fileCfg.VeryVerbose
 		}
+		if fileCfg.StandaloneMode != nil {
+			serverCfg.Standalone_Mode = *fileCfg.StandaloneMode
+		}
 	}
 
 	// Override with explicitly set command-line flags
@@ -178,6 +184,8 @@ func main() {
 		switch f.Name {
 		case "designation":
 			designation = *designationFlag
+		case "standalone":
+			serverCfg.Standalone_Mode = *standaloneMode
 		case "enable-motd":
 			serverCfg.Enable_MOTD = *enableMOTD
 		case "motd-message":

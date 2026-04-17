@@ -51,10 +51,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 
 	self := "bridge@" + designation
 
-	// Create instance and bridge manager
-	instance := duplex.New(self, duplex_config)
-	instance.IsBridge = true
-
+	// Create bridge manager
 	server := &Server{
 		Self:               self,
 		Close:              make(chan bool),
@@ -62,7 +59,6 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 		ClassicClients:     make(Targets),
 		DeltaResolverCache: make(map[*duplex.Peer]HelloArgs),
 		Config:             server_config,
-		instance:           instance,
 		RoomsMap:           make(map[RoomKey]*Room),
 		roomEvents:         make(chan RoomEvent, 1024),
 		snowflakeGen:       node,
@@ -71,6 +67,13 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 			JSONDecoder:   json.Unmarshal,
 			StrictRouting: true,
 		}),
+	}
+
+	// Create instance
+	if !server_config.Standalone_Mode {
+		instance := duplex.New(self, duplex_config)
+		instance.IsBridge = true
+		server.instance = instance
 	}
 
 	// Configure Health endpoint
@@ -98,7 +101,9 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 	}))
 
 	// Configure Delta Peer
-	server.ConfigureDelta(designation)
+	if !server_config.Standalone_Mode {
+		server.ConfigureDelta(designation)
+	}
 
 	return server
 }
@@ -119,11 +124,13 @@ func (s *Server) Run() {
 		}
 	}()
 
-	// Launch instance app
-	go func() {
-		defer wg.Done()
-		s.instance.Run()
-	}()
+	if !s.Config.Standalone_Mode {
+		// Launch instance app
+		go func() {
+			defer wg.Done()
+			s.instance.Run()
+		}()
+	}
 
 	// Wait for close signal
 	<-s.Close

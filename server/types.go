@@ -119,6 +119,9 @@ type Config struct {
 
 	// Rate limiting: If enabled, this will kick a client if they exceed the rate limit. Otherwise, packets are dropped.
 	Kick_On_Rate_Limit bool
+
+	// If enabled, the server will only provide the classic Clients server, and won't create or use the Delta protocol.
+	Standalone_Mode bool
 }
 
 type Server struct {
