@@ -3,32 +3,31 @@ module github.com/cloudlink-delta/bridge
 go 1.26.2
 
 require (
-	github.com/cloudlink-delta/bridge/server v0.0.0-20260417043521-2a671ef0011d
+	github.com/bwmarrin/snowflake v0.3.0
 	github.com/cloudlink-delta/duplex v0.0.0-20260416052438-25852d0bdaa0
+	github.com/goccy/go-json v0.10.6
+	github.com/gofiber/contrib/monitor v0.1.2
+	github.com/gofiber/contrib/v3/websocket v1.1.0
+	github.com/gofiber/fiber/v3 v3.1.0
+	github.com/google/uuid v1.6.0
+	github.com/kaptinlin/jsonschema v0.7.7
 	github.com/pion/webrtc/v3 v3.3.6
 )
 
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
-	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/fasthttp/websocket v1.5.12 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gofiber/contrib/monitor v0.1.2 // indirect
-	github.com/gofiber/contrib/v3/websocket v1.1.0 // indirect
-	github.com/gofiber/fiber/v3 v3.1.0 // indirect
 	github.com/gofiber/schema v1.7.0 // indirect
 	github.com/gofiber/utils/v2 v2.0.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/kaptinlin/go-i18n v0.4.0 // indirect
 	github.com/kaptinlin/jsonpointer v0.4.17 // indirect
-	github.com/kaptinlin/jsonschema v0.7.7 // indirect
 	github.com/kaptinlin/messageformat-go v0.4.20 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect

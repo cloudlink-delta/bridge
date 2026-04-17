@@ -88,8 +88,6 @@ github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMn
 github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6Dob7S7YxXgwXpfOuvO54S+tGdZdw9fuRZt25Ag=
 github.com/circonus-labs/circonusllhist v0.1.3/go.mod h1:kMXHVDlOchFAehlya5ePtbp5jckzBHf4XRpQvBOLI+I=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/cloudlink-delta/bridge/server v0.0.0-20260417043521-2a671ef0011d h1:wNUK7aQFTXXZXczUziYRH/TexMuMnE1J0P5bqh/I3Xo=
-github.com/cloudlink-delta/bridge/server v0.0.0-20260417043521-2a671ef0011d/go.mod h1:shsBWiHHlx4qVizgsVNYNGYAsICtZ1h2D6bYMqWxsnQ=
 github.com/cloudlink-delta/duplex v0.0.0-20260416052438-25852d0bdaa0 h1:3SXQmmltB8AN0qwexhLxUrb+KYA03XMx6/Ihyy5S7As=
 github.com/cloudlink-delta/duplex v0.0.0-20260416052438-25852d0bdaa0/go.mod h1:5erf3a416LjzB7WC+5IS2LgHgCxE2AgwbZLO9VyU9bA=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
