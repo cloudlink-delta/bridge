@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/bwmarrin/snowflake v0.3.0
-	github.com/cloudlink-delta/duplex v0.0.0-20260416052438-25852d0bdaa0
+	github.com/cloudlink-delta/duplex v0.0.0-20260417151601-8f218b5e01ca
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/contrib/monitor v0.1.2
 	github.com/gofiber/contrib/v3/websocket v1.1.0
@@ -25,6 +25,7 @@ require (
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gofiber/schema v1.7.0 // indirect
 	github.com/gofiber/utils/v2 v2.0.3 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/kaptinlin/go-i18n v0.4.0 // indirect
 	github.com/kaptinlin/jsonpointer v0.4.17 // indirect
@@ -53,6 +54,7 @@ require (
 	github.com/pion/turn/v2 v2.1.6 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/rs/cors v1.11.1 // indirect
 	github.com/savsgio/gotils v0.0.0-20250924091648-bce9a52d7761 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
