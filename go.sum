@@ -6,6 +6,8 @@ github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9 h1:xz6Nv3zcw
 github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9/go.mod h1:2wSM9zJkl1UQEFZgSd68NfCgRz1VL1jzy/RjCg+ULrs=
 github.com/cloudlink-delta/duplex v0.0.0-20260417204830-4824553a1f9f h1:cAYTqXNL+oNK5rZ+FPt097+0RJ2aOa08icxRsYZhjmQ=
 github.com/cloudlink-delta/duplex v0.0.0-20260417204830-4824553a1f9f/go.mod h1:XufYa5qxtLLNjJTgOuXBYJW12b8qDz7RWwqTTpFGNmE=
+github.com/cloudlink-delta/peerjs-go v0.0.0-20260417204616-3d3dc508461a h1:RJSfKCmZ0lTQhKLbdMtuMgCt+dBiDdCIVmZA4Y4Nd6c=
+github.com/cloudlink-delta/peerjs-go v0.0.0-20260417204616-3d3dc508461a/go.mod h1:zV9o/pJVO6yor7qZ7Lbs8fmL9rDRp6IVYvDs2f0RIrQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
