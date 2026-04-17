@@ -111,7 +111,7 @@ func New(designation string, server_config *Config, duplex_config *duplex.Config
 func (s *Server) Run() {
 	// Init waitgroup
 	var wg sync.WaitGroup
-	wg.Add(2) // Add 2 waitgroup tasks
+	wg.Add(1) // Add 1 waitgroup task for Fiber app
 
 	// Launch Room Manager
 	go s.RoomManager()
@@ -125,6 +125,7 @@ func (s *Server) Run() {
 	}()
 
 	if !s.Config.Standalone_Mode {
+		wg.Add(1) // Add 1 waitgroup task for instance app
 		// Launch instance app
 		go func() {
 			defer wg.Done()
@@ -137,8 +138,10 @@ func (s *Server) Run() {
 
 	// Shutdown components
 	_ = s.App.Shutdown()
-	s.instance.Close <- true
-	<-s.instance.Done
+	if !s.Config.Standalone_Mode {
+		s.instance.Close <- true
+		<-s.instance.Done
+	}
 
 	wg.Wait() // Wait for both apps to finish
 	s.Done <- true
