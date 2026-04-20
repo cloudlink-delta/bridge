@@ -76,6 +76,9 @@ func main() {
 	viper.BindPFlag("rate_limit_interval", pflag.Lookup("rate-limit-interval"))
 	viper.BindPFlag("kick_on_rate_limit", pflag.Lookup("kick-on-rate-limit"))
 
+	// Load values from environment variables
+	viper.AutomaticEnv()
+
 	// If config file is provided, load it
 	if cfgFile := viper.GetString("config"); cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
