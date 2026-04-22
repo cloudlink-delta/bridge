@@ -7,7 +7,7 @@ require (
 	github.com/cloudlink-delta/duplex v0.0.0-20260417204830-4824553a1f9f
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/contrib/monitor v0.1.2
-	github.com/gofiber/contrib/v3/websocket v1.1.0
+	github.com/gofiber/contrib/v3/websocket v1.1.1
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/google/uuid v1.6.0
 	github.com/kaptinlin/jsonschema v0.7.7
