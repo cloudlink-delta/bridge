@@ -10,7 +10,7 @@ require (
 	github.com/gofiber/contrib/v3/websocket v1.1.1
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/google/uuid v1.6.0
-	github.com/kaptinlin/jsonschema v0.7.7
+	github.com/kaptinlin/jsonschema v0.7.8
 	github.com/pion/webrtc/v3 v3.3.6
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
@@ -32,8 +32,8 @@ require (
 	github.com/gofiber/schema v1.7.0 // indirect
 	github.com/gofiber/utils/v2 v2.0.3 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/kaptinlin/go-i18n v0.4.0 // indirect
-	github.com/kaptinlin/jsonpointer v0.4.17 // indirect
+	github.com/kaptinlin/go-i18n v0.4.1 // indirect
+	github.com/kaptinlin/jsonpointer v0.4.18 // indirect
 	github.com/kaptinlin/messageformat-go v0.4.20 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
