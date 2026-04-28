@@ -480,6 +480,11 @@ func (s *Server) Unsubscribe(client *BridgeClient, room RoomKey) {
 	})
 }
 
+func (*Server) Respond_With_Message_And_Code(c *websocket.Conn, code SocketCodes, message []byte) error {
+	c.WriteMessage(websocket.TextMessage, message)
+	return c.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(int(code.Code), string(message)), time.Now().Add(time.Second))
+}
+
 func (*Server) Respond_With_Code(c *websocket.Conn, code SocketCodes) error {
 	return c.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(int(code.Code), code.Message), time.Now().Add(time.Second))
 }

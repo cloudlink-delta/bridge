@@ -28,9 +28,18 @@ func (c *BridgeClient) Writer() {
 }
 
 func (c *BridgeClient) Reader() {
+	// 1. Set a hard limit of 64KB
+	c.Conn.SetReadLimit(64 * 1024)
+
+	// 2. Define a heartbeat/timeout interval
+	waitTimeout := 60 * time.Second
 reader:
 	for {
+		// 3. Refresh deadline; If no packets are received within 60 seconds the connection is aborted.
+		c.Conn.SetReadDeadline(time.Now().Add(waitTimeout))
+
 		if msg_type, packet, err := c.Conn.ReadMessage(); err != nil {
+			c.Server.Logger.Error().AnErr("error", err).Msg("Error reading from client")
 			c.exit <- true
 			break reader
 		} else {
@@ -71,8 +80,8 @@ reader:
 				case nil:
 					if p, ok := c.DetectAndReadProtocol(packet); !ok {
 						c.Server.Logger.Error().Msgf("%s ⚠️  Aborting connection to client: Failed to identify protocol.", c.GiveName())
-						c.writer <- []byte("Failed to detect your client's protocol. Please try again later.")
-						c.Server.Respond_With_Code(c.Conn, Protocol_Detection_Failure)
+						err_msg := []byte("Failed to detect your client's protocol. Please try again later.")
+						c.Server.Respond_With_Message_And_Code(c.Conn, Protocol_Detection_Failure, err_msg)
 						c.exit <- true
 						break reader
 					} else {
@@ -86,16 +95,16 @@ reader:
 					go p.Reader(c, packet)
 				default:
 					c.Server.Logger.Error().Msgf("%s ⚠️  Aborting connection to client: Failed to process client protocol.", c.GiveName())
-					c.writer <- []byte("Failed to process your client's protocol. Please report this to the server administrator.")
-					c.Server.Respond_With_Code(c.Conn, Protocol_Handler_Failure)
+					err_msg := []byte("Failed to process your client's protocol. Please report this to the server administrator.")
+					c.Server.Respond_With_Message_And_Code(c.Conn, Protocol_Handler_Failure, err_msg)
 					c.exit <- true
 					break reader
 				}
 
 			default:
 				c.Server.Logger.Error().Msgf("%s ⚠️  Aborting connection to client: Unsupported WebSocket frame type.", c.GiveName())
-				c.writer <- []byte("You sent a packet that the server does not understand; This server only supports text frames.")
-				c.Server.Respond_With_Code(c.Conn, Generic_Error)
+				err_msg := []byte("You sent a packet that the server does not understand; This server only supports text frames.")
+				c.Server.Respond_With_Message_And_Code(c.Conn, Generic_Error, err_msg)
 				c.exit <- true
 				break reader
 			}

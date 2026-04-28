@@ -4,13 +4,13 @@ go 1.26.2
 
 require (
 	github.com/bwmarrin/snowflake v0.3.0
-	github.com/cloudlink-delta/duplex v0.0.0-20260417204830-4824553a1f9f
+	github.com/cloudlink-delta/duplex v0.0.0-20260428151014-084c2767fc50
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/contrib/monitor v0.1.2
-	github.com/gofiber/contrib/v3/websocket v1.1.1
-	github.com/gofiber/fiber/v3 v3.1.0
+	github.com/gofiber/contrib/v3/websocket v1.1.2
+	github.com/gofiber/fiber/v3 v3.2.0
 	github.com/google/uuid v1.6.0
-	github.com/kaptinlin/jsonschema v0.7.8
+	github.com/kaptinlin/jsonschema v0.7.11
 	github.com/pion/webrtc/v3 v3.3.6
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
@@ -20,7 +20,7 @@ require (
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9 // indirect
-	github.com/cloudlink-delta/peerjs-go v0.0.0-20260417204616-3d3dc508461a // indirect
+	github.com/cloudlink-delta/peerjs-go v0.0.0-20260428150411-5ced1f219b0d // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/fasthttp/websocket v1.5.12 // indirect
@@ -29,16 +29,16 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gofiber/schema v1.7.0 // indirect
-	github.com/gofiber/utils/v2 v2.0.3 // indirect
+	github.com/gofiber/schema v1.7.1 // indirect
+	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/kaptinlin/go-i18n v0.4.1 // indirect
-	github.com/kaptinlin/jsonpointer v0.4.18 // indirect
-	github.com/kaptinlin/messageformat-go v0.4.20 // indirect
+	github.com/kaptinlin/go-i18n v0.4.4 // indirect
+	github.com/kaptinlin/jsonpointer v0.4.19 // indirect
+	github.com/kaptinlin/messageformat-go v0.6.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.21 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pion/datachannel v1.6.0 // indirect
@@ -50,7 +50,7 @@ require (
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/rtcp v1.2.16 // indirect
 	github.com/pion/rtp v1.10.1 // indirect
-	github.com/pion/sctp v1.9.4 // indirect
+	github.com/pion/sctp v1.9.5 // indirect
 	github.com/pion/sdp/v3 v3.0.18 // indirect
 	github.com/pion/srtp/v2 v2.0.20 // indirect
 	github.com/pion/stun v0.6.1 // indirect
