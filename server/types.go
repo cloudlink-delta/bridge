@@ -45,7 +45,7 @@ var (
 
 type Room struct {
 	Clients    Targets
-	GlobalVars sync.Map // Protocol-agnostic global variable storage
+	GlobalVars *sync.Map // Protocol-agnostic global variable storage
 }
 
 type Targets map[*BridgeClient]bool
@@ -61,14 +61,45 @@ const (
 	OpDoesRoomExist
 	OpGetActiveRooms
 	OpCanAllocateNRooms
-	OpGetRoomForVars
+	OpGetRoomVars
+	OpSetRoomVar
+	OpDeleteRoomVar
 )
+
+func (r RoomOp) String() string {
+	switch r {
+	case OpJoinRoom:
+		return "join room"
+	case OpLeaveRoom:
+		return "leave room"
+	case OpGetClients:
+		return "get clients"
+	case OpGetTargets:
+		return "get targets"
+	case OpDoesRoomExist:
+		return "does room exist"
+	case OpGetActiveRooms:
+		return "get active rooms"
+	case OpCanAllocateNRooms:
+		return "can allocate n rooms"
+	case OpGetRoomVars:
+		return "get room vars"
+	case OpSetRoomVar:
+		return "set room var"
+	case OpDeleteRoomVar:
+		return "delete room var"
+	default:
+		return "unknown"
+	}
+}
 
 type RoomEvent struct {
 	Op      RoomOp
 	Client  *BridgeClient
 	Room    RoomKey
 	N       int
+	Key     any
+	Value   any
 	Respond chan any
 }
 
@@ -270,22 +301,22 @@ type RoomKey string
 type RoomKeys []RoomKey
 
 type BridgeClient struct {
-	Conn     *websocket.Conn
-	ID       string
-	Peer     *duplex.Peer
-	UUID     string
-	Username any
-	writer   chan []byte
-	exit     chan bool
-	Rooms    RoomKeys
-	room_mux sync.RWMutex
-	dialect  uint
-	Protocol Protocol
-	Server   *Server
+	Conn     *websocket.Conn `json:"-"`
+	ID       string          `json:"id"`
+	Peer     *duplex.Peer    `json:"-"`
+	UUID     string          `json:"uuid"`
+	Username any             `json:"username,omitempty"`
+	writer   chan []byte     `json:"-"`
+	exit     chan bool       `json:"-"`
+	Rooms    RoomKeys        `json:"rooms"`
+	room_mux sync.RWMutex    `json:"-"`
+	dialect  uint            `json:"-"`
+	Protocol Protocol        `json:"-"`
+	Server   *Server         `json:"-"`
 
 	// Rate limiting
-	last_msg_time time.Time
-	msg_count     int
+	last_msg_time time.Time `json:"-"`
+	msg_count     int       `json:"-"`
 }
 
 type Packet interface {

@@ -156,6 +156,8 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		return
 	}
 
+	s.Logger.Debug().Any("packet", p).Any("client", client).Msg("Received CL2 packet")
+
 	if client.Conn != nil {
 		s.classicclientsmu.RLock()
 		active := s.ClassicClients[client]
@@ -258,9 +260,7 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 			}
 		case "1":
 			// Mode 1: Standard Global Variable Broadcast
-			if gv := s.GetRoomGlobalVars(DEFAULT_ROOM); gv != nil {
-				gv.Store(p.Var, p.Data)
-			}
+			s.SetRoomGlobalVar(client, DEFAULT_ROOM, p.Var, p.Data)
 			s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 				Command: "gvar",
 				Name:    p.Var,

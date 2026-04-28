@@ -64,6 +64,8 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		return
 	}
 
+	s.Logger.Debug().Any("packet", p).Any("client", client).Msg("Received Scratch packet")
+
 	if client.Conn != nil {
 		s.classicclientsmu.RLock()
 		active := s.ClassicClients[client]
@@ -131,9 +133,7 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		}
 		projectRoom := client.Rooms[0]
 
-		if gv := s.GetRoomGlobalVars(projectRoom); gv != nil {
-			gv.Store(p.Name, p.Value)
-		}
+		s.SetRoomGlobalVar(client, projectRoom, p.Name, p.Value)
 
 		s.Broadcast(projectRoom, &ScratchPacket{
 			Method: p.Method,

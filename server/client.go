@@ -28,16 +28,10 @@ func (c *BridgeClient) Writer() {
 }
 
 func (c *BridgeClient) Reader() {
-	// 1. Set a hard limit of 64KB
+	// Set a hard limit of 64KB
 	c.Conn.SetReadLimit(64 * 1024)
-
-	// 2. Define a heartbeat/timeout interval
-	waitTimeout := 60 * time.Second
 reader:
 	for {
-		// 3. Refresh deadline; If no packets are received within 60 seconds the connection is aborted.
-		c.Conn.SetReadDeadline(time.Now().Add(waitTimeout))
-
 		if msg_type, packet, err := c.Conn.ReadMessage(); err != nil {
 			c.Server.Logger.Error().AnErr("error", err).Msg("Error reading from client")
 			c.exit <- true
@@ -68,6 +62,7 @@ reader:
 						c.exit <- true
 						break reader
 					} else {
+						c.Server.Logger.Warn().Msgf("%s ⚠️  Client exceeding rate limit...", c.GiveName())
 						// Silently drop new packets
 						continue
 					}

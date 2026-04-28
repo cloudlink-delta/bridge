@@ -52,6 +52,10 @@ func New(server_config *Config, duplex_config *duplex.Config) *Server {
 
 	self := "bridge@" + server_config.Designation
 
+	if server_config.Standalone_Mode {
+		self += "standalone"
+	}
+
 	// Create bridge manager
 	server := &Server{
 		Self:               self,
@@ -61,7 +65,7 @@ func New(server_config *Config, duplex_config *duplex.Config) *Server {
 		DeltaResolverCache: make(map[*duplex.Peer]HelloArgs),
 		Config:             server_config,
 		RoomsMap:           make(map[RoomKey]*Room),
-		roomEvents:         make(chan RoomEvent, 1024),
+		roomEvents:         make(chan RoomEvent),
 		snowflakeGen:       node,
 		App: fiber.New(fiber.Config{
 			JSONEncoder:   json.Marshal,
@@ -158,14 +162,21 @@ func (s *Server) Run() {
 	s.Done <- true
 }
 
+func (s *Server) make_response(a any, e RoomEvent) {
+	s.Logger.Debug().Any("response", a).Msg("🚪 replying")
+	e.Respond <- a
+}
+
 func (s *Server) RoomManager() {
 	for event := range s.roomEvents {
+		s.Logger.Debug().Str("opcode", event.Op.String()).Any("key", event.Key).Any("value", event.Value).Msg("🚪 processing")
+
 		switch event.Op {
 		case OpJoinRoom:
 			r, exists := s.RoomsMap[event.Room]
 			if !exists {
-				s.Logger.Info().Msgf("%s 🚪 Creating room %s", event.Client.GiveName(), event.Room)
-				r = &Room{Clients: make(Targets)}
+				s.Logger.Info().Any("client", event.Client).Any("room", event.Room).Msgf("🚪 creating")
+				r = &Room{Clients: make(Targets), GlobalVars: &sync.Map{}}
 				s.RoomsMap[event.Room] = r
 			}
 			r.Clients[event.Client] = true
@@ -174,7 +185,7 @@ func (s *Server) RoomManager() {
 				delete(r.Clients, event.Client)
 				if len(r.Clients) == 0 {
 					delete(s.RoomsMap, event.Room)
-					s.Logger.Info().Msgf("%s 🚪 Destroying vacant room %s", event.Client.GiveName(), event.Room)
+					s.Logger.Info().Any("client", event.Client).Any("room", event.Room).Msgf("🚪 destroying")
 				}
 			}
 		case OpGetClients:
@@ -185,7 +196,7 @@ func (s *Server) RoomManager() {
 					clients = append(clients, c)
 				}
 			}
-			event.Respond <- clients
+			s.make_response(clients, event)
 		case OpGetTargets:
 			var targets Targets
 			if r, exists := s.RoomsMap[event.Room]; exists {
@@ -194,12 +205,12 @@ func (s *Server) RoomManager() {
 					targets[c] = true
 				}
 			}
-			event.Respond <- targets
+			s.make_response(targets, event)
 		case OpDoesRoomExist:
 			_, exists := s.RoomsMap[event.Room]
-			event.Respond <- exists
+			s.make_response(exists, event)
 		case OpGetActiveRooms:
-			event.Respond <- len(s.RoomsMap)
+			s.make_response(len(s.RoomsMap), event)
 		case OpCanAllocateNRooms:
 			active_rooms := len(s.RoomsMap)
 			decrement := 0
@@ -208,20 +219,56 @@ func (s *Server) RoomManager() {
 					decrement = -1
 				}
 			}
-			event.Respond <- active_rooms+event.N+decrement <= int(s.Config.Maximum_Rooms)
-		case OpGetRoomForVars:
+			s.make_response(active_rooms+event.N+decrement <= int(s.Config.Maximum_Rooms), event)
+		case OpGetRoomVars:
 			if r, exists := s.RoomsMap[event.Room]; exists {
-				event.Respond <- &r.GlobalVars
+				s.make_response(r.GlobalVars, event)
 			} else {
-				event.Respond <- (*sync.Map)(nil)
+				s.make_response((*sync.Map)(nil), event)
+			}
+		case OpSetRoomVar:
+			if r, exists := s.RoomsMap[event.Room]; exists {
+
+				if _, ok := r.GlobalVars.Load(event.Key); !ok {
+					s.Logger.Info().Any("client", event.Client).Any("room", event.Room).Any("gvar", event.Key).Msgf("🚪 creating")
+				}
+
+				r.GlobalVars.Store(event.Key, event.Value)
+				s.make_response(true, event)
+			} else {
+				s.make_response(false, event)
+			}
+		case OpDeleteRoomVar:
+			if r, exists := s.RoomsMap[event.Room]; exists {
+
+				if _, ok := r.GlobalVars.Load(event.Key); !ok {
+					s.Logger.Info().Any("client", event.Client).Any("room", event.Room).Any("gvar", event.Key).Msgf("🚪 deleting")
+				}
+
+				r.GlobalVars.Delete(event.Key)
+				s.make_response(true, event)
+			} else {
+				s.make_response(false, event)
 			}
 		}
 	}
 }
 
+func (s *Server) DeleteRoomGlobalVar(room RoomKey, key any) bool {
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpDeleteRoomVar, Room: room, Key: key, Respond: resp}
+	return (<-resp).(bool)
+}
+
+func (s *Server) SetRoomGlobalVar(client *BridgeClient, room RoomKey, key any, value any) bool {
+	resp := make(chan any, 1)
+	s.roomEvents <- RoomEvent{Op: OpSetRoomVar, Client: client, Room: room, Key: key, Value: value, Respond: resp}
+	return (<-resp).(bool)
+}
+
 func (s *Server) GetRoomGlobalVars(room RoomKey) *sync.Map {
 	resp := make(chan any, 1)
-	s.roomEvents <- RoomEvent{Op: OpGetRoomForVars, Room: room, Respond: resp}
+	s.roomEvents <- RoomEvent{Op: OpGetRoomVars, Room: room, Respond: resp}
 	return (<-resp).(*sync.Map)
 }
 

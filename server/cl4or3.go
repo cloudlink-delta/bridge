@@ -81,6 +81,8 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		return
 	}
 
+	s.Logger.Debug().Any("packet", p).Any("client", client).Msg("Received CL3/4 packet")
+
 	if client.Conn != nil {
 		s.classicclientsmu.RLock()
 		active := s.ClassicClients[client]
@@ -153,9 +155,7 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 
 			// Store the variable dynamically across all protocols
 			if p.Command == "gvar" {
-				if gv := s.GetRoomGlobalVars(room); gv != nil {
-					gv.Store(p.Name, p.Value)
-				}
+				s.SetRoomGlobalVar(client, room, p.Name, p.Value)
 			}
 
 			s.Broadcast(room, &Common_Packet{
