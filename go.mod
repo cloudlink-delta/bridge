@@ -10,7 +10,7 @@ require (
 	github.com/gofiber/contrib/v3/websocket v1.2.0
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/google/uuid v1.6.0
-	github.com/kaptinlin/jsonschema v0.8.1
+	github.com/kaptinlin/jsonschema v0.9.2
 	github.com/pion/webrtc/v3 v3.3.6
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/pflag v1.0.10
