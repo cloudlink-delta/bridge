@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/gofiber/contrib/v3/websocket"
@@ -115,58 +114,32 @@ reader:
 }
 
 func (c *BridgeClient) GiveName() string {
+	username := c.GetUsername()
 	// If the username is nil or empty, return just the UUID
-	if c.Username == nil || c.Username == "" {
+	if username == nil || username == "" {
 		return fmt.Sprintf("[%s]", c.UUID)
 	}
 	// If they have a username, include it with the UUID
-	return fmt.Sprintf("[%v (%s)]", c.Username, c.UUID)
+	return fmt.Sprintf("[%v (%s)]", username, c.UUID)
 }
 
 func (c *BridgeClient) DetectAndReadProtocol(data []byte) (Protocol, bool) {
-	var wg sync.WaitGroup
-	resultCh := make(chan Protocol, 1) // Buffered channel of size 1
-
-	detectors := []func(){
-		func() {
-			defer wg.Done()
-			p := New_CL4_or_CL3(c.Server)
-			if p.Reader(c, data) {
-				c.Protocol = p
-				resultCh <- p
-			}
-		},
-		func() {
-			defer wg.Done()
-			p := New_Scratch(c.Server)
-			if p.Reader(c, data) {
-				c.Protocol = p
-				resultCh <- p
-			}
-		},
-		func() {
-			defer wg.Done()
-			p := New_CL2(c.Server)
-			if p.Reader(c, data) {
-				c.Protocol = p
-				resultCh <- p
-			}
-		},
+	cl4or3 := New_CL4_or_CL3(c.Server)
+	if cl4or3.Reader(c, data) {
+		c.Protocol = cl4or3
+		return cl4or3, true
 	}
 
-	wg.Add(len(detectors))
-	for _, detector := range detectors {
-		go detector()
+	scratch := New_Scratch(c.Server)
+	if scratch.Reader(c, data) {
+		c.Protocol = scratch
+		return scratch, true
 	}
 
-	// Goroutine to wait for all detectors and close the channel
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	if p, ok := <-resultCh; ok {
-		return p, true
+	cl2 := New_CL2(c.Server)
+	if cl2.Reader(c, data) {
+		c.Protocol = cl2
+		return cl2, true
 	}
 
 	// No valid protocol detected

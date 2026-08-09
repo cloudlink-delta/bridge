@@ -167,6 +167,9 @@ type Server struct {
 	Done                  chan bool
 	Config                *Config
 	instance              *duplex.Instance
+	BridgeRegistry        Registry
+	DiscoveryRegistry     Registry
+	registry_mux          sync.RWMutex
 	deltaclientsmu        sync.RWMutex
 	ClassicClients        Targets
 	classicclientsmu      sync.RWMutex
@@ -177,6 +180,66 @@ type Server struct {
 	Address               string
 	DeltaResolverCache    map[*duplex.Peer]HelloArgs
 	Predisposed_Instances []string
+}
+
+type Registry map[string]*duplex.Peer
+
+func (s *Server) RegisterDiscovery(peer *duplex.Peer) {
+	if peer == nil {
+		return
+	}
+	s.registry_mux.Lock()
+	defer s.registry_mux.Unlock()
+	if s.DiscoveryRegistry == nil {
+		s.DiscoveryRegistry = make(Registry)
+	}
+	s.DiscoveryRegistry[peer.GetPeerID()] = peer
+}
+
+func (s *Server) UnregisterDiscovery(peer *duplex.Peer) {
+	if peer == nil {
+		return
+	}
+	s.registry_mux.Lock()
+	defer s.registry_mux.Unlock()
+	delete(s.DiscoveryRegistry, peer.GetPeerID())
+	for k, v := range s.DiscoveryRegistry {
+		if v == peer {
+			delete(s.DiscoveryRegistry, k)
+		}
+	}
+}
+
+func (s *Server) RegisterBridge(peer *duplex.Peer) {
+	if peer == nil {
+		return
+	}
+	s.registry_mux.Lock()
+	defer s.registry_mux.Unlock()
+	if s.BridgeRegistry == nil {
+		s.BridgeRegistry = make(Registry)
+	}
+	s.BridgeRegistry[peer.GetPeerID()] = peer
+}
+
+func (s *Server) UnregisterBridge(peer *duplex.Peer) {
+	if peer == nil {
+		return
+	}
+	s.registry_mux.Lock()
+	defer s.registry_mux.Unlock()
+	delete(s.BridgeRegistry, peer.GetPeerID())
+	for k, v := range s.BridgeRegistry {
+		if v == peer {
+			delete(s.BridgeRegistry, k)
+		}
+	}
+}
+
+func (s *Server) GetRegistryCounts() (int, int) {
+	s.registry_mux.RLock()
+	defer s.registry_mux.RUnlock()
+	return len(s.DiscoveryRegistry), len(s.BridgeRegistry)
 }
 
 type CLDelta struct {
@@ -301,22 +364,63 @@ type RoomKey string
 type RoomKeys []RoomKey
 
 type BridgeClient struct {
-	Conn     *websocket.Conn `json:"-"`
-	ID       string          `json:"id"`
-	Peer     *duplex.Peer    `json:"-"`
-	UUID     string          `json:"uuid"`
-	Username any             `json:"username,omitempty"`
-	writer   chan []byte     `json:"-"`
-	exit     chan bool       `json:"-"`
-	Rooms    RoomKeys        `json:"rooms"`
-	room_mux sync.RWMutex    `json:"-"`
-	dialect  uint            `json:"-"`
-	Protocol Protocol        `json:"-"`
-	Server   *Server         `json:"-"`
+	Conn      *websocket.Conn `json:"-"`
+	ID        string          `json:"id"`
+	Peer      *duplex.Peer    `json:"-"`
+	UUID      string          `json:"uuid"`
+	Username  any             `json:"username,omitempty"`
+	writer    chan []byte     `json:"-"`
+	exit      chan bool       `json:"-"`
+	Rooms     RoomKeys        `json:"rooms"`
+	room_mux  sync.RWMutex    `json:"-"`
+	state_mux sync.RWMutex    `json:"-"`
+	dialect   uint            `json:"-"`
+	Protocol  Protocol        `json:"-"`
+	Server    *Server         `json:"-"`
 
 	// Rate limiting
 	last_msg_time time.Time `json:"-"`
 	msg_count     int       `json:"-"`
+}
+
+func (c *BridgeClient) GetRooms() RoomKeys {
+	c.room_mux.RLock()
+	defer c.room_mux.RUnlock()
+	rooms := make(RoomKeys, len(c.Rooms))
+	copy(rooms, c.Rooms)
+	return rooms
+}
+
+func (c *BridgeClient) GetUsername() any {
+	c.state_mux.RLock()
+	defer c.state_mux.RUnlock()
+	return c.Username
+}
+
+func (c *BridgeClient) SetUsername(username any) {
+	c.state_mux.Lock()
+	defer c.state_mux.Unlock()
+	c.Username = username
+}
+
+func (c *BridgeClient) GetDialect() uint {
+	c.state_mux.RLock()
+	defer c.state_mux.RUnlock()
+	return c.dialect
+}
+
+func (c *BridgeClient) SetDialect(dialect uint) {
+	c.state_mux.Lock()
+	defer c.state_mux.Unlock()
+	c.dialect = dialect
+}
+
+func (c *BridgeClient) UpgradeDialect(newDialect uint) {
+	c.state_mux.Lock()
+	defer c.state_mux.Unlock()
+	if newDialect > c.dialect {
+		c.dialect = newDialect
+	}
 }
 
 type Packet interface {
@@ -339,4 +443,34 @@ func (p *CL2Packet) Packet() Packet {
 type groupKey struct {
 	proto   Protocol
 	dialect uint
+}
+
+var (
+	commonPacketSchemaOnce sync.Once
+	commonPacketSchema     *jsonschema.Schema
+
+	scratchPacketSchemaOnce sync.Once
+	scratchPacketSchema     *jsonschema.Schema
+)
+
+func GetCommonPacketSchema() *jsonschema.Schema {
+	commonPacketSchemaOnce.Do(func() {
+		s, err := jsonschema.FromStruct[Common_Packet]()
+		if err != nil {
+			panic(err)
+		}
+		commonPacketSchema = s
+	})
+	return commonPacketSchema
+}
+
+func GetScratchPacketSchema() *jsonschema.Schema {
+	scratchPacketSchemaOnce.Do(func() {
+		s, err := jsonschema.FromStruct[ScratchPacket]()
+		if err != nil {
+			panic(err)
+		}
+		scratchPacketSchema = s
+	})
+	return scratchPacketSchema
 }

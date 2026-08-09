@@ -5,22 +5,87 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/cloudlink-delta/bridge/server"
 	"github.com/cloudlink-delta/duplex"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
+func parsePredisposedInstances(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	var list []string
+	if err := json.Unmarshal([]byte(raw), &list); err == nil && len(list) > 0 {
+		var result []string
+		for _, s := range list {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		return result
+	}
+
+	parts := strings.Split(raw, ",")
+	var result []string
+	for _, p := range parts {
+		if trimmed := strings.Trim(strings.TrimSpace(p), "'\"[]"); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func parseICEServers(raw string) []webrtc.ICEServer {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	var servers []webrtc.ICEServer
+	if err := json.Unmarshal([]byte(raw), &servers); err == nil && len(servers) > 0 {
+		return servers
+	}
+
+	var urlList []string
+	if err := json.Unmarshal([]byte(raw), &urlList); err == nil && len(urlList) > 0 {
+		var urls []string
+		for _, u := range urlList {
+			if trimmed := strings.TrimSpace(u); trimmed != "" {
+				urls = append(urls, trimmed)
+			}
+		}
+		if len(urls) > 0 {
+			return []webrtc.ICEServer{{URLs: urls}}
+		}
+	}
+
+	parts := strings.Split(raw, ",")
+	var urls []string
+	for _, p := range parts {
+		if trimmed := strings.Trim(strings.TrimSpace(p), "'\"[]"); trimmed != "" {
+			urls = append(urls, trimmed)
+		}
+	}
+	if len(urls) > 0 {
+		return []webrtc.ICEServer{{URLs: urls}}
+	}
+	return nil
+}
+
 func main() {
 
 	// CLI flags
 	pflag.Int("log-level", (int)(zerolog.InfoLevel), "Logging level to use. Acceptable values range from -1 to 7. (default: 1 \"Info\")")
-	pflag.String("config", "", "Path to JSON configuration file")
+	pflag.String("config", "", "Path to JSON configuration file, i.e. ~/config.json")
 	pflag.String("designation", "", "Globally unique designation (required)")
 	pflag.Bool("standalone", false, "Run in standalone mode (Only run the classic Clients server)")
 
@@ -30,7 +95,8 @@ func main() {
 	pflag.Bool("session-secure", true, "Enable secure session server connections (required if session-hostname is set)")
 	pflag.Int("session-port", 443, "Port where the session server is listening (required if session-hostname is set)")
 	pflag.String("session-hostname", "", "Hostname where the session server is listening")
-	pflag.String("ice-servers", "", "JSON-encoded array of ICE servers")
+	pflag.String("ice-servers", "", "Comma-separated list or JSON-encoded array of ICE server URLs")
+	pflag.String("predisposed-instances", "", "Comma-separated list or JSON-encoded array of instances to connect to on startup")
 
 	// Discovery server flags
 	pflag.Bool("enable-motd", true, "Enable message-of-the-day")
@@ -64,6 +130,7 @@ func main() {
 	viper.BindPFlag("session_port", pflag.Lookup("session-port"))
 	viper.BindPFlag("session_hostname", pflag.Lookup("session-hostname"))
 	viper.BindPFlag("ice_servers_flag", pflag.Lookup("ice-servers"))
+	viper.BindPFlag("predisposed_instances_flag", pflag.Lookup("predisposed-instances"))
 	viper.BindPFlag("enable_motd", pflag.Lookup("enable-motd"))
 	viper.BindPFlag("motd_message", pflag.Lookup("motd-message"))
 	viper.BindPFlag("serve_ip_addresses", pflag.Lookup("serve-ips"))
@@ -125,19 +192,13 @@ func main() {
 	}
 
 	var iceServers []webrtc.ICEServer
-	if viper.IsSet("ice_servers") {
-		data, _ := json.Marshal(viper.Get("ice_servers"))
-		if err := json.Unmarshal(data, &iceServers); err != nil {
-			log.Fatalf("Failed to parse ice_servers from config: %v", err)
-		}
-		duplexCfg.ICEServers = iceServers
-	}
 	if iceFlag := viper.GetString("ice_servers_flag"); iceFlag != "" {
-		if err := json.Unmarshal([]byte(iceFlag), &iceServers); err != nil {
-			log.Fatalf("Failed to parse ice-servers flag: %v", err)
-		}
-		duplexCfg.ICEServers = iceServers
+		iceServers = parseICEServers(iceFlag)
+	} else if viper.IsSet("ice_servers") {
+		data, _ := json.Marshal(viper.Get("ice_servers"))
+		iceServers = parseICEServers(string(data))
 	}
+	duplexCfg.ICEServers = iceServers
 
 	// Verify loaded configuration
 	if !standaloneMode && designation == "" {
@@ -151,6 +212,18 @@ func main() {
 
 	// Initialize the bridge server
 	instance := server.New(&serverCfg, &duplexCfg)
+
+	// Load predisposed instances if provided
+	var predisposedInstances []string
+	if predisposedFlag := viper.GetString("predisposed_instances_flag"); predisposedFlag != "" {
+		predisposedInstances = parsePredisposedInstances(predisposedFlag)
+	} else if viper.IsSet("predisposed_instances") {
+		data, _ := json.Marshal(viper.Get("predisposed_instances"))
+		predisposedInstances = parsePredisposedInstances(string(data))
+	}
+	if len(predisposedInstances) > 0 {
+		instance.Predisposed_Instances = predisposedInstances
+	}
 
 	// Graceful shutdown handler
 	c := make(chan os.Signal, 1)

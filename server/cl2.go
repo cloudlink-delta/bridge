@@ -76,7 +76,8 @@ func (s *CL2) On_Disconnect(c *BridgeClient, rooms RoomKeys) {
 	delete(s.links, c)
 	s.linksMu.Unlock()
 
-	if c.Username == nil || c.Username == "" {
+	username := c.GetUsername()
+	if username == nil || username == "" {
 		return
 	}
 
@@ -167,7 +168,7 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		}
 	}
 
-	if client.dialect == Dialect_Undefined {
+	if client.GetDialect() == Dialect_Undefined {
 		if p.Command == "sh" {
 			s.Upgrade_Dialect(client, Dialect_CL2_Late)
 		} else {
@@ -196,10 +197,11 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		s.linksMu.Unlock()
 
 	case "set", "sn":
-		if client.Username != nil && client.Username != "" {
+		usernameVal := client.GetUsername()
+		if usernameVal != nil && usernameVal != "" {
 			return
 		}
-		client.Username = p.Sender
+		client.SetUsername(p.Sender)
 
 		s.Unicast(client, &Common_Packet{
 			Command: "ulist",
@@ -232,7 +234,8 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		})
 
 	case "ps", "private":
-		if client.Username == nil || client.Username == "" {
+		usernameVal := client.GetUsername()
+		if usernameVal == nil || usernameVal == "" {
 			return
 		}
 		targets := s.Get_Clients(DEFAULT_ROOM, p.Recipient)
@@ -285,7 +288,8 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 		}
 
 	case "l_p": // Linked Private
-		if client.Username == nil || client.Username == "" {
+		usernameVal := client.GetUsername()
+		if usernameVal == nil || usernameVal == "" {
 			return
 		}
 
@@ -315,7 +319,5 @@ func (s *CL2) Handler(client *BridgeClient, p *CL2Packet) {
 }
 
 func (s *CL2) Upgrade_Dialect(c *BridgeClient, newdialect uint) {
-	if newdialect > c.dialect {
-		c.dialect = newdialect
-	}
+	c.UpgradeDialect(newdialect)
 }

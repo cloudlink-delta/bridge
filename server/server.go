@@ -63,6 +63,8 @@ func New(server_config *Config, duplex_config *duplex.Config) *Server {
 		Done:               make(chan bool),
 		ClassicClients:     make(Targets),
 		DeltaResolverCache: make(map[*duplex.Peer]HelloArgs),
+		BridgeRegistry:     make(Registry),
+		DiscoveryRegistry:  make(Registry),
 		Config:             server_config,
 		RoomsMap:           make(map[RoomKey]*Room),
 		roomEvents:         make(chan RoomEvent),
@@ -85,10 +87,17 @@ func New(server_config *Config, duplex_config *duplex.Config) *Server {
 
 	// Configure Health endpoint
 	server.App.Get("/health", func(c fiber.Ctx) error {
+		var status any = "standalone"
+		if server.instance != nil {
+			status = server.instance.GetPeerState()
+		}
+		discoveryCount, bridgeCount := server.GetRegistryCounts()
 		return c.JSON(fiber.Map{
-			"status":         server.instance.GetPeerState(),
-			"active_clients": server.ReportActiveConnections(true),
-			"active_rooms":   server.ReportActiveRooms(),
+			"status":          status,
+			"active_clients":  server.ReportActiveConnections(true),
+			"active_rooms":    server.ReportActiveRooms(),
+			"discovery_count": discoveryCount,
+			"bridge_count":    bridgeCount,
 		})
 	})
 
@@ -257,31 +266,45 @@ func (s *Server) RoomManager() {
 func (s *Server) DeleteRoomGlobalVar(room RoomKey, key any) bool {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpDeleteRoomVar, Room: room, Key: key, Respond: resp}
-	return (<-resp).(bool)
+	val, ok := (<-resp).(bool)
+	return ok && val
 }
 
 func (s *Server) SetRoomGlobalVar(client *BridgeClient, room RoomKey, key any, value any) bool {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpSetRoomVar, Client: client, Room: room, Key: key, Value: value, Respond: resp}
-	return (<-resp).(bool)
+	val, ok := (<-resp).(bool)
+	return ok && val
 }
 
 func (s *Server) GetRoomGlobalVars(room RoomKey) *sync.Map {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpGetRoomVars, Room: room, Respond: resp}
-	return (<-resp).(*sync.Map)
+	res, ok := (<-resp).(*sync.Map)
+	if !ok {
+		return nil
+	}
+	return res
 }
 
 func (s *Server) Copy_Clients(room RoomKey) BridgeClients {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpGetClients, Room: room, Respond: resp}
-	return (<-resp).(BridgeClients)
+	res, ok := (<-resp).(BridgeClients)
+	if !ok {
+		return nil
+	}
+	return res
 }
 
 func (s *Server) Get_Targets(room RoomKey) Targets {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpGetTargets, Room: room, Respond: resp}
-	return (<-resp).(Targets)
+	res, ok := (<-resp).(Targets)
+	if !ok {
+		return nil
+	}
+	return res
 }
 
 func (c *BridgeClients) Targets() Targets {
@@ -373,7 +396,7 @@ func (s *Server) multicast(p Packet, targets Targets) {
 		if target.Protocol == nil {
 			continue
 		}
-		key := groupKey{target.Protocol, target.dialect}
+		key := groupKey{target.Protocol, target.GetDialect()}
 		groups[key] = append(groups[key], target)
 	}
 
@@ -486,6 +509,9 @@ func (s *Server) Destroy_Client(c *BridgeClient) {
 	default:
 	}
 
+	defer func() { recover() }()
+	close(c.writer)
+
 	s.ReportActiveConnections(false)
 }
 
@@ -504,7 +530,8 @@ func (s *Server) safeSend(c *BridgeClient, msg []byte) {
 func (s *Server) DoesRoomExist(room RoomKey) bool {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpDoesRoomExist, Room: room, Respond: resp}
-	return (<-resp).(bool)
+	val, ok := (<-resp).(bool)
+	return ok && val
 }
 
 func (s *Server) Subscribe(client *BridgeClient, room RoomKey) {
@@ -539,8 +566,11 @@ func (*Server) Respond_With_Code(c *websocket.Conn, code SocketCodes) error {
 func (s *Server) ReportActiveRooms() int {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpGetActiveRooms, Respond: resp}
-	rooms_open := (<-resp).(int)
-	return rooms_open
+	val, ok := (<-resp).(int)
+	if !ok {
+		return 0
+	}
+	return val
 }
 
 func (s *Server) ReportActiveConnections(silent bool) int {
@@ -560,5 +590,6 @@ func (s *Server) ReportActiveConnections(silent bool) int {
 func (s *Server) CanAllocateNRooms(c *BridgeClient, n int) bool {
 	resp := make(chan any, 1)
 	s.roomEvents <- RoomEvent{Op: OpCanAllocateNRooms, Client: c, N: n, Respond: resp}
-	return (<-resp).(bool)
+	val, ok := (<-resp).(bool)
+	return ok && val
 }

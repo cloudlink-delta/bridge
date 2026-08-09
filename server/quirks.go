@@ -65,7 +65,7 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 			reply.Data = strList
 
 		case "gmsg":
-			if c.dialect == Dialect_CL2_Late {
+			if c.GetDialect() == Dialect_CL2_Late {
 				reply.Type = "sf"
 				reply.Data = CL2Packet_TxData{Type: "gs", Data: original.Value}
 			} else {
@@ -75,18 +75,18 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 
 		case "pmsg":
 			reply.Type = "ps"
-			if c.dialect == Dialect_CL2_Late {
+			if c.GetDialect() == Dialect_CL2_Late {
 				reply.Type = "sf"
 				reply.Data = CL2Packet_TxData{Type: "ps", Data: original.Value}
 			} else {
 				reply.Data = original.Value
 			}
-			if originObj, ok := original.Origin.(*CL4_UserObject); ok {
+			if originObj, ok := original.Origin.(*CL4_UserObject); ok && originObj != nil {
 				reply.ID = fmt.Sprintf("%v", originObj.Username)
 			}
 
 		case "linked_gmsg": // Internal command translated to CL2 lm (Linked Message)
-			if c.dialect == Dialect_CL2_Late {
+			if c.GetDialect() == Dialect_CL2_Late {
 				reply.Type = "sf"
 				reply.Data = CL2Packet_TxData{Type: "lm", Mode: "g", Data: original.Value}
 			} else {
@@ -94,10 +94,10 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 			}
 
 		case "linked_pmsg": // Internal command translated to CL2 lm (Linked Message)
-			if c.dialect == Dialect_CL2_Late {
+			if c.GetDialect() == Dialect_CL2_Late {
 				reply.Type = "sf"
 				reply.Data = CL2Packet_TxData{Type: "lm", Mode: "p", Data: original.Value}
-				if originObj, ok := original.Origin.(*CL4_UserObject); ok {
+				if originObj, ok := original.Origin.(*CL4_UserObject); ok && originObj != nil {
 					reply.ID = fmt.Sprintf("%v", originObj.Username)
 				}
 			} else {
@@ -105,7 +105,7 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 			}
 
 		case "gvar":
-			if c.dialect == Dialect_CL2_Late {
+			if c.GetDialect() == Dialect_CL2_Late {
 				reply.Type = "sf"
 				reply.Data = CL2Packet_TxData{Type: "vm", Mode: "g", Var: original.Name, Data: original.Value}
 			} else {
@@ -113,10 +113,10 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 			}
 
 		case "pvar":
-			if c.dialect == Dialect_CL2_Late {
+			if c.GetDialect() == Dialect_CL2_Late {
 				reply.Type = "sf"
 				reply.Data = CL2Packet_TxData{Type: "vm", Mode: "p", Var: original.Name, Data: original.Value}
-				if originObj, ok := original.Origin.(*CL4_UserObject); ok {
+				if originObj, ok := original.Origin.(*CL4_UserObject); ok && originObj != nil {
 					reply.ID = fmt.Sprintf("%v", originObj.Username)
 				}
 			} else {
@@ -126,7 +126,7 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 		case "direct":
 			reply.Type = "direct"
 			reply.Data = original.Value
-			if originObj, ok := original.Origin.(*CL4_UserObject); ok {
+			if originObj, ok := original.Origin.(*CL4_UserObject); ok && originObj != nil {
 				reply.ID = fmt.Sprintf("%v", originObj.Username)
 			}
 
@@ -136,7 +136,7 @@ func (s *CL2) Apply_Quirks(c *BridgeClient, p any) any {
 
 	case *ScratchPacket:
 		if original.Method == "set" || original.Method == "create" {
-			if c.dialect == Dialect_CL2_Late {
+			if c.GetDialect() == Dialect_CL2_Late {
 				reply.Type = "sf"
 				reply.Data = CL2Packet_TxData{Type: "vm", Mode: "g", Var: original.Name, Data: original.Value}
 			} else {
@@ -207,18 +207,18 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 	}
 
 	// NOW WIPE THE ROOMS KEY FOR OLDER DIALECTS (MUST BE NIL FOR OMITEMPTY)
-	if packet.Rooms != "" && c.dialect < Dialect_CL4_0_1_8 {
+	if packet.Rooms != "" && c.GetDialect() < Dialect_CL4_0_1_8 {
 		packet.Rooms = "" // Room contexts not supported before 0.1.8
 	}
 
 	switch packet.Command {
 	case "statuscode":
-		if c.dialect < Dialect_CL3_0_1_7 {
+		if c.GetDialect() < Dialect_CL3_0_1_7 {
 			return nil // Drop unsupported command
 		}
 
 	case "server_version":
-		switch c.dialect {
+		switch c.GetDialect() {
 		case Dialect_CL3_0_1_5:
 			// CL3 0.1.5 expects strict nesting with 'data' inner key
 			packet.Command = "direct"
@@ -238,7 +238,7 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 		}
 
 	case "motd":
-		switch c.dialect {
+		switch c.GetDialect() {
 		case Dialect_CL3_0_1_5:
 			return nil // 0.1.5 does not support MOTD
 		case Dialect_CL3_0_1_7:
@@ -250,13 +250,13 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 		}
 
 	case "client_obj":
-		if c.dialect < Dialect_CL4_0_2_0 {
+		if c.GetDialect() < Dialect_CL4_0_2_0 {
 			return nil // client_obj is a 0.2.0+ specific feature
 		}
 
 	case "ulist":
-		if c.dialect < Dialect_CL4_0_2_0 {
-			if c.dialect < Dialect_CL4_0_1_8 {
+		if c.GetDialect() < Dialect_CL4_0_2_0 {
+			if c.GetDialect() < Dialect_CL4_0_1_8 {
 
 				// 0.1.5 and 0.1.7 DO NOT support differential updates.
 				packet.Mode = ""
@@ -272,7 +272,7 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 				var sb strings.Builder
 				first := true
 				for _, u := range userList {
-					if u.Username != nil && u.Username != "" { // Avoid inserting blanks
+					if u != nil && u.Username != nil && u.Username != "" { // Avoid inserting blanks
 						if !first {
 							sb.WriteString(";")
 						}
@@ -290,12 +290,14 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 					if userList, ok := packet.Value.([]*CL4_UserObject); ok {
 						strSlice := make([]any, len(userList))
 						for i, u := range userList {
-							strSlice[i] = u.Username
+							if u != nil {
+								strSlice[i] = u.Username
+							}
 						}
 						packet.Value = strSlice
 					}
 				case "add", "remove":
-					if userObj, ok := packet.Value.(*CL4_UserObject); ok {
+					if userObj, ok := packet.Value.(*CL4_UserObject); ok && userObj != nil {
 						packet.Value = userObj.Username
 					}
 				}
@@ -303,18 +305,18 @@ func (s *CL4_or_CL3) Apply_Quirks(c *BridgeClient, p any) any {
 		}
 
 	case "gmsg", "gvar", "pmsg", "pvar", "direct", "linked_gmsg", "linked_pmsg":
-		if c.dialect < Dialect_CL4_0_1_8 {
+		if c.GetDialect() < Dialect_CL4_0_1_8 {
 			packet.Rooms = nil // MUST be nil so `omitempty` removes the key completely!
 		}
 
 		// origin object handling
-		if c.dialect < Dialect_CL4_0_1_8 {
+		if c.GetDialect() < Dialect_CL4_0_1_8 {
 
 			// 0.1.8 and 0.1.9 DO support UserObject origins.
 			// We only downgrade for 0.1.7 and older.
 
-			if originObj, ok := packet.Origin.(*CL4_UserObject); ok {
-				if c.dialect == Dialect_CL3_0_1_7 {
+			if originObj, ok := packet.Origin.(*CL4_UserObject); ok && originObj != nil {
+				if c.GetDialect() == Dialect_CL3_0_1_7 {
 					packet.Origin = originObj.Username
 				} else {
 					packet.Origin = nil // Not supported in 0.1.5

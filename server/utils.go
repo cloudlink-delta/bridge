@@ -16,7 +16,7 @@ func (CL4_or_CL3) isTypeDeclaration(val any) bool {
 
 // Returns a formatted user object.
 func (s *Server) UserObject(c *BridgeClient) *CL4_UserObject {
-	return &CL4_UserObject{ID: c.ID, UUID: c.UUID, Username: c.Username}
+	return &CL4_UserObject{ID: c.ID, UUID: c.UUID, Username: c.GetUsername()}
 }
 
 func (s *Server) Get_User_List(room RoomKey, filter ...*BridgeClient) []*CL4_UserObject {
@@ -29,7 +29,7 @@ func (s *Server) Get_User_List(room RoomKey, filter ...*BridgeClient) []*CL4_Use
 			continue
 		}
 
-		if client.Username != nil {
+		if username := client.GetUsername(); username != nil && username != "" {
 			fullList = append(fullList, s.UserObject(client))
 		}
 	}
@@ -53,7 +53,7 @@ func (s *Server) Get_Clients(room RoomKey, targetID any) Targets {
 	for _, tID := range targetIDs {
 		tIDStr := fmt.Sprintf("%v", tID) // Stringify for safe comparison
 		for _, client := range clients {
-			if client.ID == tIDStr || fmt.Sprintf("%v", client.Username) == tIDStr || client.UUID == tIDStr {
+			if client.ID == tIDStr || fmt.Sprintf("%v", client.GetUsername()) == tIDStr || client.UUID == tIDStr {
 				targets[client] = true
 			}
 		}
@@ -65,11 +65,12 @@ func (s *Server) Get_Clients(room RoomKey, targetID any) Targets {
 // Get_Target_Rooms converts the dynamic Rooms field into a slice of strings, defaulting to the client's current rooms.
 func (s *Server) Get_Target_Rooms(client *BridgeClient, roomsContext any) RoomKeys {
 	if roomsContext == nil || roomsContext == "" {
+		rooms := client.GetRooms()
 		// If the client's rooms list is empty, default to DEFAULT_ROOM defensively
-		if len(client.Rooms) == 0 {
+		if len(rooms) == 0 {
 			return RoomKeys{DEFAULT_ROOM}
 		}
-		return client.Rooms
+		return rooms
 	}
 
 	var targetRooms RoomKeys

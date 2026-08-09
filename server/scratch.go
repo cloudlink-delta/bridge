@@ -11,19 +11,15 @@ type Scratch_Handler struct {
 }
 
 func New_Scratch(parent *Server) Protocol {
-	schema, err := jsonschema.FromStruct[ScratchPacket]()
-	if err != nil {
-		panic(err)
-	}
-
 	return &Scratch_Handler{
-		Schema: schema,
+		Schema: GetScratchPacketSchema(),
 		Server: parent,
 	}
 }
 
 func (s Scratch_Handler) On_Disconnect(c *BridgeClient, rooms RoomKeys) {
-	if c.Username == nil || c.Username == "" {
+	username := c.GetUsername()
+	if username == nil || username == "" {
 		return
 	}
 
@@ -79,7 +75,8 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 	case "handshake":
 
 		// Don't allow repeated handshakes on the same session
-		if client.Username != nil && client.Username != "" {
+		usernameVal := client.GetUsername()
+		if usernameVal != nil && usernameVal != "" {
 			s.Respond_With_Code(client.Conn, Generic_Error)
 			client.Conn.Close()
 			return
@@ -93,7 +90,7 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		}
 
 		// Set values for setup
-		client.Username = p.User
+		client.SetUsername(p.User)
 		projectRoom := RoomKey(p.ProjectID)
 
 		// Abort if the server is "busy"
@@ -128,10 +125,11 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		}
 
 	case "set", "create":
-		if client.Username == nil || len(client.Rooms) == 0 {
+		rooms := client.GetRooms()
+		if client.GetUsername() == nil || len(rooms) == 0 {
 			return
 		}
-		projectRoom := client.Rooms[0]
+		projectRoom := rooms[0]
 
 		s.SetRoomGlobalVar(client, projectRoom, p.Name, p.Value)
 
@@ -142,10 +140,11 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		})
 
 	case "rename":
-		if client.Username == nil || len(client.Rooms) == 0 {
+		rooms := client.GetRooms()
+		if client.GetUsername() == nil || len(rooms) == 0 {
 			return
 		}
-		projectRoom := client.Rooms[0]
+		projectRoom := rooms[0]
 
 		if gv := s.GetRoomGlobalVars(projectRoom); gv != nil {
 			if oldVal, ok := gv.Load(p.Name); ok {
@@ -161,10 +160,11 @@ func (s Scratch_Handler) Handler(client *BridgeClient, p *ScratchPacket) {
 		})
 
 	case "delete":
-		if client.Username == nil || len(client.Rooms) == 0 {
+		rooms := client.GetRooms()
+		if client.GetUsername() == nil || len(rooms) == 0 {
 			return
 		}
-		projectRoom := client.Rooms[0]
+		projectRoom := rooms[0]
 
 		if gv := s.GetRoomGlobalVars(projectRoom); gv != nil {
 			gv.Delete(p.Name)

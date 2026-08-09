@@ -4,27 +4,19 @@ import (
 	"fmt"
 
 	"github.com/goccy/go-json"
-	"github.com/kaptinlin/jsonschema"
 )
 
 // Creates a new instance of the protocol handler.
 func New_CL4_or_CL3(parent *Server) Protocol {
-
-	// Cache the schema
-	schema, err := jsonschema.FromStruct[Common_Packet]()
-	if err != nil {
-		panic(err)
-	}
-
-	// Return the new protocol instance
 	return &CL4_or_CL3{
-		Schema: schema,
+		Schema: GetCommonPacketSchema(),
 		Server: parent,
 	}
 }
 
 func (s CL4_or_CL3) On_Disconnect(c *BridgeClient, rooms RoomKeys) { // (And Scratch_Handler)
-	if c.Username == nil || c.Username == "" {
+	username := c.GetUsername()
+	if username == nil || username == "" {
 		return
 	}
 
@@ -117,13 +109,14 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 
 	case "setid":
-		if client.Username != nil && client.Username != "" {
+		usernameVal := client.GetUsername()
+		if usernameVal != nil && usernameVal != "" {
 			s.Send_Status_Code(client, StatusIDAlreadySet, p.Listener, nil, s.UserObject(client))
 			return
 		}
 
 		if username, ok := p.Value.(string); ok {
-			client.Username = username
+			client.SetUsername(username)
 
 			s.Send_Status_Code(client, StatusOK, p.Listener, nil, s.UserObject(client))
 
@@ -168,7 +161,7 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 
 		if p.Listener != nil {
-			if client.dialect <= Dialect_CL4_0_1_9 {
+			if client.GetDialect() <= Dialect_CL4_0_1_9 {
 				s.Unicast(client, &Common_Packet{
 					Command:  p.Command,
 					Name:     p.Name,
@@ -182,7 +175,8 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 
 	case "pmsg", "pvar":
-		if client.Username == nil || client.Username == "" {
+		usernameVal := client.GetUsername()
+		if usernameVal == nil || usernameVal == "" {
 			s.Send_Status_Code(client, StatusIDRequired, p.Listener, nil, nil)
 			return
 		}
@@ -225,7 +219,8 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		anyResultsFound := false
 
 		var originObj any
-		if client.Username != nil && client.Username != "" {
+		usernameVal := client.GetUsername()
+		if usernameVal != nil && usernameVal != "" {
 			originObj = s.UserObject(client)
 		} else {
 			originObj = map[string]string{
@@ -255,7 +250,8 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 
 	case "link":
-		if client.Username == nil || client.Username == "" {
+		usernameVal := client.GetUsername()
+		if usernameVal == nil || usernameVal == "" {
 			s.Send_Status_Code(client, StatusIDRequired, p.Listener, nil, nil)
 			return
 		}
@@ -310,7 +306,8 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 
 	case "unlink":
-		if client.Username == nil || client.Username == "" {
+		usernameVal := client.GetUsername()
+		if usernameVal == nil || usernameVal == "" {
 			s.Send_Status_Code(client, StatusIDRequired, p.Listener, nil, nil)
 			return
 		}
@@ -319,7 +316,7 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		var roomsToUnlink RoomKeys
 		if p.Value == nil || p.Value == "" {
 			// Unlink all current rooms the client is in
-			roomsToUnlink = append(roomsToUnlink, client.Rooms...)
+			roomsToUnlink = append(roomsToUnlink, client.GetRooms()...)
 		} else {
 			roomsToUnlink = s.Get_Target_Rooms(client, p.Value)
 		}
@@ -335,7 +332,7 @@ func (s CL4_or_CL3) Handler(client *BridgeClient, p *Common_Packet) {
 		}
 
 		// If they are in 0 rooms, force them back into default
-		if len(client.Rooms) == 0 {
+		if len(client.GetRooms()) == 0 {
 			s.Subscribe(client, DEFAULT_ROOM)
 			s.Broadcast(DEFAULT_ROOM, &Common_Packet{
 				Command: "ulist", Mode: "add", Value: s.UserObject(client), Rooms: DEFAULT_ROOM,
@@ -372,7 +369,7 @@ func (s CL4_or_CL3) Send_Status_Code(client *BridgeClient, code StatusCode, list
 
 // Generates a spoofed server version string to fool the client's compatibility checker
 func (s CL4_or_CL3) Spoof_Server_Version(client *BridgeClient) string {
-	switch client.dialect {
+	switch client.GetDialect() {
 	case Dialect_CL3_0_1_5:
 		return "0.1.5"
 	case Dialect_CL3_0_1_7:
@@ -413,7 +410,5 @@ func (s CL4_or_CL3) Derive_Dialect(p *Common_Packet, c *BridgeClient) {
 
 // Helper to automatically change the dialect version of the client based on known first-packet behaviors
 func (p *CL4_or_CL3) Upgrade_Dialect(c *BridgeClient, newdialect uint) {
-	if newdialect > c.dialect {
-		c.dialect = newdialect
-	}
+	c.UpgradeDialect(newdialect)
 }

@@ -30,13 +30,16 @@ func (s *Server) ConfigureDelta(designation string) {
 
 	i.OnDiscoveryConnected = func(peer *duplex.Peer) {
 
+		// Register in DiscoveryRegistry
+		s.RegisterDiscovery(peer)
+
 		// Cache the entry
 		s.deltaclientsmu.Lock()
-		defer s.deltaclientsmu.Unlock()
 		s.DeltaResolverCache[peer] = HelloArgs{
 			Name:        "discovery",
 			Designation: designation,
 		}
+		s.deltaclientsmu.Unlock()
 
 		reply := peer.WaitForMatchedPacket("AUTO_REGISTER", "VIOLATION")
 		switch reply.Opcode {
@@ -69,11 +72,35 @@ func (s *Server) ConfigureDelta(designation string) {
 		delete(s.DeltaResolverCache, peer)
 		s.deltaclientsmu.Unlock()
 
+		// Unregister from Discovery & Bridge registries
+		s.UnregisterDiscovery(peer)
+		s.UnregisterBridge(peer)
+
 		bc.Protocol.On_Disconnect(bc, currentRooms)
 	}
 
-	i.OnBridgeConnected = func(peer *duplex.Peer) {}
+	i.OnBridgeConnected = func(peer *duplex.Peer) {
+		s.RegisterBridge(peer)
+		s.Logger.Info().Msgf("Registered bridge server %s in BridgeRegistry", peer.GetPeerID())
+	}
 	i.OnRelayConnected = func(peer *duplex.Peer) {}
+
+	i.Bind("DISCOVER", func(peer *duplex.Peer, packet *duplex.RxPacket) {
+		var targetBridge string
+		if err := json.Unmarshal(packet.Payload, &targetBridge); err != nil {
+			targetBridge = strings.Trim(string(packet.Payload), "\"")
+		}
+		if targetBridge != "" && targetBridge != s.Self {
+			s.registry_mux.RLock()
+			_, exists := s.BridgeRegistry[targetBridge]
+			s.registry_mux.RUnlock()
+
+			if !exists {
+				s.Logger.Info().Msgf("Discovered bridge %s via %s, connecting...", targetBridge, peer.GetPeerID())
+				i.Connect(targetBridge)
+			}
+		}
+	})
 
 	// Stub handler that automatically declines incoming call requests
 	i.Remap("CALL", func(peer *duplex.Peer, _ *duplex.RxPacket) {
@@ -344,7 +371,7 @@ func (d *CLDelta) ToBridgeClient(peer *duplex.Peer) *BridgeClient {
 
 	d.deltaclientsmu.RLock()
 	if args, ok := d.DeltaResolverCache[peer]; ok {
-		bc.Username = args.Name
+		bc.SetUsername(args.Name)
 	}
 	d.deltaclientsmu.RUnlock()
 
@@ -352,7 +379,8 @@ func (d *CLDelta) ToBridgeClient(peer *duplex.Peer) *BridgeClient {
 }
 
 func (d *CLDelta) On_Disconnect(c *BridgeClient, rooms RoomKeys) {
-	if c.Username == nil || c.Username == "" {
+	username := c.GetUsername()
+	if username == nil || username == "" {
 		return
 	}
 
