@@ -7,7 +7,7 @@ require (
 	github.com/cloudlink-delta/duplex v0.0.0-20260809044239-ee92fdeca457
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/contrib/monitor v0.1.2
-	github.com/gofiber/contrib/v3/websocket v1.2.2
+	github.com/gofiber/contrib/v3/websocket v1.2.3
 	github.com/gofiber/fiber/v3 v3.4.0
 	github.com/google/uuid v1.6.0
 	github.com/kaptinlin/jsonschema v0.9.8
@@ -28,7 +28,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gofiber/schema v1.8.3 // indirect
+	github.com/gofiber/schema v1.8.4 // indirect
 	github.com/gofiber/utils/v2 v2.4.1 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/kaptinlin/jsonpointer v0.4.28 // indirect
