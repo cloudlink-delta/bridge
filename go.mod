@@ -8,7 +8,7 @@ require (
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/contrib/monitor v0.1.2
 	github.com/gofiber/contrib/v3/websocket v1.2.2
-	github.com/gofiber/fiber/v3 v3.4.0
+	github.com/gofiber/fiber/v3 v3.5.0
 	github.com/google/uuid v1.6.0
 	github.com/kaptinlin/jsonschema v0.9.8
 	github.com/pion/webrtc/v4 v4.2.18
