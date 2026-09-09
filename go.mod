@@ -7,8 +7,8 @@ require (
 	github.com/cloudlink-delta/duplex v0.0.0-20260809044239-ee92fdeca457
 	github.com/goccy/go-json v0.10.6
 	github.com/gofiber/contrib/monitor v0.1.2
-	github.com/gofiber/contrib/v3/websocket v1.2.2
-	github.com/gofiber/fiber/v3 v3.4.0
+	github.com/gofiber/contrib/v3/websocket v1.2.5
+	github.com/gofiber/fiber/v3 v3.5.0
 	github.com/google/uuid v1.6.0
 	github.com/kaptinlin/jsonschema v0.9.8
 	github.com/pion/webrtc/v4 v4.2.18
@@ -18,7 +18,7 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.2.2 // indirect
+	github.com/andybalholm/brotli v1.2.3 // indirect
 	github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9 // indirect
 	github.com/cloudlink-delta/peerjs-go v0.0.0-20260809042802-df488257be1a // indirect
 	github.com/ebitengine/purego v0.10.2 // indirect
@@ -28,11 +28,11 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gofiber/schema v1.8.3 // indirect
-	github.com/gofiber/utils/v2 v2.4.1 // indirect
+	github.com/gofiber/schema v1.8.5 // indirect
+	github.com/gofiber/utils/v2 v2.5.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/kaptinlin/jsonpointer v0.4.28 // indirect
-	github.com/klauspost/compress v1.19.2 // indirect
+	github.com/klauspost/compress v1.20.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260802145828-341c2f0c90b5 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
@@ -68,9 +68,9 @@ require (
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 )
