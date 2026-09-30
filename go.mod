@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/bwmarrin/snowflake v0.3.0
 	github.com/cloudlink-delta/duplex v0.0.0-20260809044239-ee92fdeca457
-	github.com/goccy/go-json v0.10.6
+	github.com/goccy/go-json v0.11.1
 	github.com/gofiber/contrib/monitor v0.1.2
 	github.com/gofiber/contrib/v3/websocket v1.2.2
 	github.com/gofiber/fiber/v3 v3.4.0
