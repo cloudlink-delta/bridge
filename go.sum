@@ -35,8 +35,8 @@ github.com/gofiber/contrib/monitor v0.1.2 h1:u7YQI9Qynjvm/K+Q529kDyZGBZtjWxsXdgX
 github.com/gofiber/contrib/monitor v0.1.2/go.mod h1:WG6H++QNknSVURu1Jw9sboGBRUAZdSIM3AM2bhhYYNk=
 github.com/gofiber/contrib/v3/websocket v1.2.2 h1:kmoD+A0f4btoDSOnZJUHzJyBi1tQqL9tNhn4n0nPJSQ=
 github.com/gofiber/contrib/v3/websocket v1.2.2/go.mod h1:H0kwFA9iXc5RJca4QqCjWwc2kIpuOGQSZJONqsxwWXI=
-github.com/gofiber/fiber/v3 v3.4.0 h1:F0aND4vwZF7dR7cbvSwFQQEpBU902XHKWxrLsFBkVqw=
-github.com/gofiber/fiber/v3 v3.4.0/go.mod h1:nAhJfdxUIJJph2tPWPmqWf8QDIN2iiqQiQf3lENZpdk=
+github.com/gofiber/fiber/v3 v3.5.0 h1:dk7TOUH6DXJGtOLsN2XEG+0ZML7cznzHILTVozbNEK8=
+github.com/gofiber/fiber/v3 v3.5.0/go.mod h1:GOVDTW+gjJvfe0iJyVujbQ1Lnx+JUjFySJRI/9/xX/w=
 github.com/gofiber/schema v1.8.3 h1:06ZedxIYjngzc0095PYy7uWnFnbRflWFpikvZH61fDc=
 github.com/gofiber/schema v1.8.3/go.mod h1:jWnnZdhcW1mHyV+VnfRxKJDPNcepJsTZ9RIWxrr32Ng=
 github.com/gofiber/utils/v2 v2.4.1 h1:E2X9G8O5Mn7b2GDb0JU3IUk42Rw2npuhhepIbuJQ2po=
